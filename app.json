@@ -1,24 +1,66 @@
 {
   "expo": {
-    "name": "pos-billing",
+    "name": "GEET app",
     "slug": "pos-billing",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B132B"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.riye.posbilling",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "whatsapp",
+          "sms",
+          "whatsapp",
+          "sms"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B132B"
+      },
+      "package": "com.riye.posbilling",
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET"
+      ],
+      "queries": {
+        "schemes": [
+          "whatsapp",
+          "sms",
+          "tel",
+          "https",
+          "http"
+        ],
+        "package": [
+          "com.whatsapp",
+          "com.whatsapp.w4b"
+        ]
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "@react-native-community/datetimepicker"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "cb6a6cca-ec83-4e92-be97-4da8a8919344"
+      }
     }
   }
 }

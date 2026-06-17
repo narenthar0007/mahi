@@ -1,0 +1,21 @@
+directories:
+  output: release
+  buildResources: build
+appId: com.riye.posbilling.desktop
+productName: POS Billing
+files:
+  - filter:
+      - electron/**/*
+      - dist/**/*
+      - assets/**/*
+      - package.json
+extraMetadata:
+  main: electron/main.js
+win:
+  target:
+    - nsis
+  icon: assets/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+electronVersion: 35.7.5
