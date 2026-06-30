@@ -33,20 +33,7 @@
       "versionCode": 1,
       "permissions": [
         "INTERNET"
-      ],
-      "queries": {
-        "schemes": [
-          "whatsapp",
-          "sms",
-          "tel",
-          "https",
-          "http"
-        ],
-        "package": [
-          "com.whatsapp",
-          "com.whatsapp.w4b"
-        ]
-      }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
