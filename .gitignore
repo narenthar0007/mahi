@@ -26,6 +26,15 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+# Cursor IDE — local session/debug logs (never commit)
+.cursor/debug*.log
+.cursor/**/*.log
+
+# Expo export test output (local only)
+.expo-export-check/
+.expo-export-test/
+.expo-bundle-test/
+
 # macOS
 .DS_Store
 *.pem
