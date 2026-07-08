@@ -6,11 +6,9 @@
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "mobile": "powershell -ExecutionPolicy Bypass -File scripts/start-expo-mobile.ps1 -Mode lan",
-    "mobile:tunnel": "powershell -ExecutionPolicy Bypass -File scripts/start-expo-mobile.ps1 -Mode tunnel",
+    "mobile": "expo start --lan --clear",
+    "mobile:tunnel": "expo start --tunnel --clear",
     "mobile:usb": "powershell -ExecutionPolicy Bypass -File scripts/start-expo-mobile.ps1 -Mode usb",
-    "mobile:firewall": "powershell -ExecutionPolicy Bypass -File scripts/allow-expo-firewall.ps1",
-    "mobile:stop": "powershell -ExecutionPolicy Bypass -File scripts/stop-expo-mobile.ps1",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web --port 8085",
