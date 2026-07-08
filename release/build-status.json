@@ -1,0 +1,47 @@
+﻿{
+  "id": "d3ce59db-067b-488a-b57f-78418840347f",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/JT9acoyKJpCr22t5635D2LWnTyU6E4pdQiCSpRQZZWw.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/JT9acoyKJpCr22t5635D2LWnTyU6E4pdQiCSpRQZZWw.apk"
+  },
+  "fingerprint": {
+    "id": "019edaf5-2876-71c2-9cb9-3f55aa9189a7",
+    "hash": "94e3902011bc36f606262bbd4e35c0f6172be4b8"
+  },
+  "initiatingActor": {
+    "id": "bd1108d0-6356-4ac7-b9fd-9be22cd54e3b",
+    "displayName": "narenthar007"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/cb6a6cca-ec83-4e92-be97-4da8a8919344/d3ce59db-067b-488a-b57f-78418840347f/2026-06-18T14%3A21%3A11Z-2f0a2ab5-9291-419c-bad9-b9fc25a04679.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260618%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260618T142703Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=6a1b83b77a10a1455a2a8420ad6db88d17bf0824ff5c9edd4f647cbed7c1ee34e8e06ca5f8623fca99988d068f7f268aa115a410ea69ad98fdeafdadb3c820382cb7099627219ba52331fc75ba962e478db1a807fec9ff1d9b4e052eae38eb36fddb04f6e63c886a197fabe742f30cd60007b33cdc01cb8fc841a1d5953a499908913e95e04f021fda780ca818b0c51be83d189d2532d7e72240aaf4fa3e38a54f2c8bb4db7c87e1d800b9de0c833270362f2b25f905485858985d3d6120915ca5888b1925ef0ba229a05d22ec1d6c0f3a46dd49fc03c805a2031e8eabb7d91e13103c701f17954db9f6d3407b3cba978971fa372f90096f54f6d49d2a794adc"
+  ],
+  "project": {
+    "id": "cb6a6cca-ec83-4e92-be97-4da8a8919344",
+    "name": "pos-billing",
+    "slug": "pos-billing",
+    "ownerAccount": {
+      "id": "2b1250e3-5b3f-4d5a-b3c0-babad31cf79c",
+      "name": "narenthar007"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "preview",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "1",
+  "gitCommitHash": "803ba034321f88fcbf22da992d66ebb31c934482",
+  "gitCommitMessage": "Add POS billing app with mobile, desktop, and license key support.\n\nCo-authored-by: Cursor <cursoragent@cursor.com>",
+  "priority": "NORMAL",
+  "createdAt": "2026-06-18T13:39:20.265Z",
+  "updatedAt": "2026-06-18T14:28:03.444Z",
+  "completedAt": "2026-06-18T14:28:03.250Z",
+  "expirationDate": "2026-07-02T13:39:20.302Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 1417,
+    "buildQueueTime": 2514303,
+    "buildDuration": 407265
+  }
+}

@@ -8,19 +8,25 @@ import {
   Alert,
   Platform,
   TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import useStore from '../store/store';
 import ShareBillButtons from '../components/ShareBillButtons';
 import { formatCurrency } from '../utils/currency';
 import {
   formatOrderReadyMessage,
   getCustomerPhoneValidationMessage,
-  isValidCustomerPhone,
   sanitizeCustomerPhoneInput,
+  CUSTOMER_PHONE_MAX_LENGTH,
+  normalizePhoneNumber,
   sendViaWhatsApp,
 } from '../utils/billShare';
 import { showAlert } from '../utils/alert';
+import { useAppTheme } from '../utils/theme';
+import { useTranslation } from '../utils/i18n';
+import { UI, cardStyle } from '../utils/uiTheme';
 import {
   filterOrdersByDateRange,
   getExportSummary,
@@ -55,13 +61,6 @@ const DateTimePicker =
     ? require('@react-native-community/datetimepicker').default
     : null;
 
-const PRESETS = [
-  { id: 'today', label: 'Today' },
-  { id: 'week', label: '7 Days' },
-  { id: 'month', label: '30 Days' },
-  { id: 'all', label: 'All' },
-];
-
 function getPresetRange(presetId) {
   const today = new Date();
   switch (presetId) {
@@ -86,6 +85,12 @@ export default function HistoryScreen() {
   const history = useStore((s) => s.history);
   const shopName = useStore((s) => s.shopName);
   const updateOrderCustomerPhone = useStore((s) => s.updateOrderCustomerPhone);
+  const toggleOrderPaid = useStore((s) => s.toggleOrderPaid);
+  const markOrderReady = useStore((s) => s.markOrderReady);
+  const theme = useAppTheme();
+  const { t, datePresets, language } = useTranslation();
+  const tabBarHeight = useBottomTabBarHeight();
+  const listBottomPad = tabBarHeight + 24;
 
   const [fromDate, setFromDate] = useState(startOfDay(new Date()));
   const [toDate, setToDate] = useState(endOfDay(new Date()));
@@ -147,12 +152,12 @@ export default function HistoryScreen() {
 
   const handleExport = async () => {
     if (fromDate > toDate) {
-      Alert.alert('Invalid range', 'From date cannot be after To date.');
+      Alert.alert(t('invalidRange'), t('invalidRangeMsg'));
       return;
     }
 
     if (filteredForExport.length === 0) {
-      Alert.alert('No orders', 'No orders found for the selected date range.');
+      Alert.alert(t('noOrders'), t('noOrdersMsg'));
       return;
     }
 
@@ -162,25 +167,25 @@ export default function HistoryScreen() {
         shopName,
         fromDate,
         toDate,
-        format: 'html',
+        format: Platform.OS === 'web' ? 'html' : 'pdf',
       });
     } catch (error) {
       if (error?.message === 'sharing_unavailable') {
-        Alert.alert('Export failed', 'Sharing is not available on this device.');
+        Alert.alert(t('exportFailed'), t('sharingUnavailable'));
       } else {
-        Alert.alert('Export failed', 'Could not export the order table.');
+        Alert.alert(t('exportFailed'), t('exportTableFailed'));
       }
     }
   };
 
   const handleExportCsv = async () => {
     if (fromDate > toDate) {
-      Alert.alert('Invalid range', 'From date cannot be after To date.');
+      Alert.alert(t('invalidRange'), t('invalidRangeMsg'));
       return;
     }
 
     if (filteredForExport.length === 0) {
-      Alert.alert('No orders', 'No orders found for the selected date range.');
+      Alert.alert(t('noOrders'), t('noOrdersMsg'));
       return;
     }
 
@@ -194,28 +199,35 @@ export default function HistoryScreen() {
       });
     } catch (error) {
       if (error?.message === 'sharing_unavailable') {
-        Alert.alert('Export failed', 'Sharing is not available on this device.');
+        Alert.alert(t('exportFailed'), t('sharingUnavailable'));
       } else {
-        Alert.alert('Export failed', 'Could not export the CSV file.');
+        Alert.alert(t('exportFailed'), t('exportCsvFailed'));
       }
     }
   };
 
   const renderExportPanel = () => (
     <View style={styles.exportPanel}>
-      <Text style={styles.exportTitle}>Export Orders</Text>
+      <Text style={styles.exportTitle}>{t('exportOrders')}</Text>
 
       <View style={styles.presetRow}>
-        {PRESETS.map((preset) => (
+        {datePresets.map((preset) => (
           <TouchableOpacity
             key={preset.id}
-            style={[styles.presetBtn, activePreset === preset.id && styles.presetBtnActive]}
+            style={[
+              styles.presetBtn,
+              activePreset === preset.id && {
+                backgroundColor: `${theme.filterSortColor}18`,
+                borderWidth: 1,
+                borderColor: theme.filterSortColor,
+              },
+            ]}
             onPress={() => applyPreset(preset.id)}
           >
             <Text
               style={[
                 styles.presetText,
-                activePreset === preset.id && styles.presetTextActive,
+                activePreset === preset.id && { color: theme.filterSortColor },
               ]}
             >
               {preset.label}
@@ -228,7 +240,7 @@ export default function HistoryScreen() {
         {Platform.OS === 'web' ? (
           <>
             <View style={styles.dateBox}>
-              <Text style={styles.dateLabel}>From</Text>
+              <Text style={styles.dateLabel}>{t('from')}</Text>
               <TextInput
                 style={styles.webDateInput}
                 value={formatDateInput(fromDate)}
@@ -238,7 +250,7 @@ export default function HistoryScreen() {
             </View>
             <Text style={styles.dateArrow}>→</Text>
             <View style={styles.dateBox}>
-              <Text style={styles.dateLabel}>To</Text>
+              <Text style={styles.dateLabel}>{t('to')}</Text>
               <TextInput
                 style={styles.webDateInput}
                 value={formatDateInput(toDate)}
@@ -250,12 +262,12 @@ export default function HistoryScreen() {
         ) : (
           <>
             <TouchableOpacity style={styles.dateBox} onPress={() => setPickerMode('from')}>
-              <Text style={styles.dateLabel}>From</Text>
+              <Text style={styles.dateLabel}>{t('from')}</Text>
               <Text style={styles.dateValue}>{formatDateLabel(fromDate)}</Text>
             </TouchableOpacity>
             <Text style={styles.dateArrow}>→</Text>
             <TouchableOpacity style={styles.dateBox} onPress={() => setPickerMode('to')}>
-              <Text style={styles.dateLabel}>To</Text>
+              <Text style={styles.dateLabel}>{t('to')}</Text>
               <Text style={styles.dateValue}>{formatDateLabel(toDate)}</Text>
             </TouchableOpacity>
           </>
@@ -274,24 +286,31 @@ export default function HistoryScreen() {
 
       {Platform.OS === 'ios' && pickerMode && (
         <TouchableOpacity style={styles.donePickerBtn} onPress={() => setPickerMode(null)}>
-          <Text style={styles.donePickerText}>Done</Text>
+          <Text style={[styles.donePickerText, { color: theme.buttonColor }]}>{t('done')}</Text>
         </TouchableOpacity>
       )}
 
       <Text style={styles.exportMeta}>
-        {exportSummary.orderCount} orders · {formatCurrency(exportSummary.totalRevenue)} total
+        {t('exportMeta', {
+          count: exportSummary.orderCount,
+          total: formatCurrency(exportSummary.totalRevenue),
+        })}
       </Text>
 
-      <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
-        <Text style={styles.exportBtnText}>📊 Export Table (HTML)</Text>
+      <TouchableOpacity style={[styles.exportBtn, { backgroundColor: theme.headerColor }]} onPress={handleExport}>
+        <Text style={styles.exportBtnText}>
+          {t(Platform.OS === 'web' ? 'exportTableHtml' : 'exportTablePdf')}
+        </Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.exportCsvBtn} onPress={handleExportCsv}>
-        <Text style={styles.exportCsvText}>📄 Export CSV (Excel)</Text>
+        <Text style={styles.exportCsvText}>{t('exportCsvExcel')}</Text>
       </TouchableOpacity>
     </View>
   );
 
   const handleOrderReady = (order) => {
+    markOrderReady(order.id);
+
     const message = formatOrderReadyMessage({
       items: order.items || [],
       totalAmount: order.totalAmount || 0,
@@ -302,14 +321,14 @@ export default function HistoryScreen() {
 
     if (!order.customerPhone) {
       Alert.alert(
-        'No number',
-        'Tap "Add number" on this order to save a WhatsApp number, or continue to pick a contact in WhatsApp.',
-        [{ text: 'OK', onPress: () => sendViaWhatsApp(message) }]
+        t('noNumber'),
+        t('noNumberOrderReadyMsg'),
+        [{ text: t('ok'), onPress: () => sendViaWhatsApp(message) }]
       );
       return;
     }
 
-    sendViaWhatsApp(message, order.customerPhone);
+    sendViaWhatsApp(message, normalizePhoneNumber(order.customerPhone) || order.customerPhone);
   };
 
   const beginPhoneEdit = (order) => {
@@ -324,45 +343,80 @@ export default function HistoryScreen() {
 
   const savePhoneEdit = (order) => {
     const next = sanitizeCustomerPhoneInput(editingPhone);
-    const validationMessage = getCustomerPhoneValidationMessage(next);
+    const validationMessage = getCustomerPhoneValidationMessage(next, language);
     if (validationMessage) {
-      showAlert('Validation', validationMessage);
+      showAlert(t('validation'), validationMessage);
       return;
     }
     updateOrderCustomerPhone(order.id, next);
     setEditingOrderKey(null);
     setEditingPhone('');
-    showAlert('Saved', 'Customer number updated.');
+    showAlert(t('saved'), t('customerNumberUpdated'));
+  };
+
+  const getOrderCardStyle = (order) => {
+    if (order.isPaid) {
+      return { backgroundColor: 'rgba(40, 167, 69, 0.14)', borderColor: 'rgba(40, 167, 69, 0.35)' };
+    }
+    if (order.isOrderReady) {
+      return { backgroundColor: 'rgba(13, 110, 253, 0.12)', borderColor: 'rgba(13, 110, 253, 0.3)' };
+    }
+    return null;
   };
 
   const renderOrder = ({ item }) => {
-    const hasValidCustomerPhone = isValidCustomerPhone(item.customerPhone || '');
+    const orderHighlight = getOrderCardStyle(item);
 
     return (
-      <View style={styles.card}>
+      <View style={[styles.card, orderHighlight]}>
         <View style={styles.cardHeader}>
           <Text style={styles.date}>{formatDateTime(item.timestamp)}</Text>
           <View style={styles.totalBox}>
-            <Text style={styles.amount}>{formatCurrency(item.totalAmount)}</Text>
-            <TouchableOpacity
-              style={styles.orderReadyBtnInline}
-              onPress={() => handleOrderReady(item)}
-            >
-              <Text style={styles.orderReadyInlineTitle}>Order Ready</Text>
-            </TouchableOpacity>
+            <Text style={[styles.amount, { color: theme.buttonColor }]}>
+              {formatCurrency(item.totalAmount)}
+            </Text>
+            <View style={styles.statusBtnRow}>
+              <TouchableOpacity
+                style={[
+                  styles.paidBtn,
+                  item.isPaid && styles.paidBtnActive,
+                ]}
+                onPress={() => toggleOrderPaid(item.id)}
+              >
+                <Text style={[styles.paidBtnText, item.isPaid && styles.paidBtnTextActive]}>
+                  {item.isPaid ? t('paidCheck') : t('markPaid')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.orderReadyBtnInline}
+                onPress={() => handleOrderReady(item)}
+              >
+                <Text style={styles.orderReadyInlineTitle}>{t('orderReady')}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
+        {item.taxEnabled ? (
+          <Text style={styles.taxNote}>
+            {t('gstIncludedNote', {
+              cgst: formatCurrency(item.cgstAmount),
+              sgst: formatCurrency(item.sgstAmount),
+            })}
+          </Text>
+        ) : null}
         <Text style={styles.orderId} numberOfLines={1}>
-          Order ID: {item.orderId || item.id}
+          {t('orderIdLabel')} {item.orderId || item.id}
         </Text>
         <View style={styles.phoneRow}>
           <Text style={styles.itemCount}>
-            {item.itemCount} {item.itemCount === 1 ? 'item' : 'items'} purchased
-            {item.customerPhone ? ` · ${item.customerPhone}` : ' · No number'}
+            {item.itemCount === 1
+              ? t('itemPurchased', { count: item.itemCount })
+              : t('itemsPurchased', { count: item.itemCount })}
+            {item.customerPhone ? ` · ${item.customerPhone}` : ` · ${t('noNumberShort')}`}
           </Text>
           <TouchableOpacity onPress={() => beginPhoneEdit(item)} hitSlop={6}>
             <Text style={styles.editPhoneLink}>
-              {item.customerPhone ? 'Edit number' : 'Add number'}
+              {item.customerPhone ? t('editNumber') : t('addNumber')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -373,17 +427,20 @@ export default function HistoryScreen() {
               style={styles.phoneInput}
               value={editingPhone}
               onChangeText={(value) => setEditingPhone(sanitizeCustomerPhoneInput(value))}
-              placeholder="Customer WhatsApp No."
+              placeholder={t('customerWhatsAppNo')}
               keyboardType="phone-pad"
               placeholderTextColor="#adb5bd"
-              maxLength={10}
+              maxLength={CUSTOMER_PHONE_MAX_LENGTH}
             />
             <View style={styles.phoneEditActions}>
               <TouchableOpacity style={styles.phoneCancelBtn} onPress={cancelPhoneEdit}>
-                <Text style={styles.phoneCancelText}>Cancel</Text>
+                <Text style={styles.phoneCancelText}>{t('cancel')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.phoneSaveBtn} onPress={() => savePhoneEdit(item)}>
-                <Text style={styles.phoneSaveText}>Save</Text>
+              <TouchableOpacity
+                style={[styles.phoneSaveBtn, { backgroundColor: theme.buttonColor }]}
+                onPress={() => savePhoneEdit(item)}
+              >
+                <Text style={styles.phoneSaveText}>{t('save')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -404,11 +461,18 @@ export default function HistoryScreen() {
         <ShareBillButtons
           items={item.items || []}
           totalAmount={item.totalAmount || 0}
+          subtotalAmount={item.subtotalAmount}
+          cartSubtotal={item.cartSubtotal}
+          discountAmount={item.discountAmount}
+          offerApplied={item.offerApplied}
+          offerName={item.offerName}
+          taxEnabled={item.taxEnabled}
+          cgstAmount={item.cgstAmount}
+          sgstAmount={item.sgstAmount}
           timestamp={item.timestamp}
           orderId={item.orderId || item.id}
           title="Order Receipt"
           customerPhone={item.customerPhone || ''}
-          disabled={!hasValidCustomerPhone}
           compact
         />
       </View>
@@ -417,42 +481,47 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <FlatList
-        data={sortedHistory}
-        keyExtractor={(item) => item.id}
-        renderItem={renderOrder}
-        ListHeaderComponent={renderExportPanel}
-        ListEmptyComponent={
-          <View style={styles.emptyList}>
-            <Text style={styles.emptyTitle}>No orders yet</Text>
-            <Text style={styles.emptySub}>
-              Completed checkouts will appear below, newest first.
-            </Text>
-          </View>
-        }
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-      />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
+        <FlatList
+          data={sortedHistory}
+          keyExtractor={(item) => item.id}
+          renderItem={renderOrder}
+          ListHeaderComponent={renderExportPanel}
+          ListEmptyComponent={
+            <View style={styles.emptyList}>
+              <Text style={styles.emptyTitle}>{t('noOrdersYet')}</Text>
+              <Text style={styles.emptySub}>{t('noOrdersYetSub')}</Text>
+            </View>
+          }
+          contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f8f9fa' },
-  list: { padding: 16, paddingBottom: 24 },
+  safe: { flex: 1, backgroundColor: UI.bg },
+  flex: { flex: 1 },
+  list: { padding: 20, paddingBottom: 0 },
   exportPanel: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    ...cardStyle(),
+    padding: 20,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
   },
   exportTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#1a1a2e',
-    marginBottom: 12,
+    color: UI.textPrimary,
+    letterSpacing: -0.3,
+    marginBottom: 14,
   },
   presetRow: {
     flexDirection: 'row',
@@ -461,10 +530,12 @@ const styles = StyleSheet.create({
   },
   presetBtn: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#f1f3f5',
+    paddingVertical: 9,
+    borderRadius: UI.radiusFull,
+    backgroundColor: UI.surfaceMuted,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   presetBtnActive: {
     backgroundColor: '#fff0f3',
@@ -521,7 +592,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   donePickerText: {
-    color: '#e94560',
     fontWeight: '700',
   },
   exportMeta: {
@@ -555,12 +625,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    ...cardStyle(),
+    padding: 18,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e9ecef',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -582,6 +649,37 @@ const styles = StyleSheet.create({
   totalBox: {
     alignItems: 'flex-end',
     gap: 8,
+  },
+  statusBtnRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  paidBtn: {
+    backgroundColor: '#f1f3f5',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+  },
+  paidBtnActive: {
+    backgroundColor: 'rgba(40, 167, 69, 0.2)',
+    borderColor: 'rgba(40, 167, 69, 0.5)',
+  },
+  paidBtnText: {
+    color: '#495057',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  paidBtnTextActive: {
+    color: '#2b8a3e',
+  },
+  taxNote: {
+    fontSize: 12,
+    color: '#868e96',
+    marginTop: 6,
+    fontWeight: '600',
   },
   orderReadyBtnInline: {
     backgroundColor: '#25D366',
@@ -653,7 +751,6 @@ const styles = StyleSheet.create({
   },
   phoneSaveBtn: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
@@ -680,8 +777,9 @@ const styles = StyleSheet.create({
   },
   emptyList: {
     alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 16,
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+    marginTop: 12,
   },
   emptyTitle: {
     fontSize: 20,

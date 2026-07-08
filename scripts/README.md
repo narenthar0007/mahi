@@ -15,3 +15,7 @@ These scripts group app creation by platform.
 Notes:
 - iOS device installs require Apple Developer credentials; the default `preview` profile is set for an iOS Simulator build.
 - Desktop build here means: export web to `dist/` and launch Electron in prod mode (not a signed installer).
+
+### Presentations
+- **Sales deck (customer-facing):** `npm run ppt:sales` → creates `GEET-App-Sales-Presentation.pptx` in project root
+- **Internal demo deck:** `npm run ppt:demo` → creates `POS-Billing-Product-Demo.pptx`

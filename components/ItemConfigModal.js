@@ -10,8 +10,13 @@ import {
 } from 'react-native';
 import { calculateItemPrice } from '../store/store';
 import { formatCurrency } from '../utils/currency';
+import { useAppTheme } from '../utils/theme';
+import { useTranslation } from '../utils/i18n';
+import { UI, cardStyle } from '../utils/uiTheme';
 
 export default function ItemConfigModal({ visible, item, onClose, onAddToCart }) {
+  const theme = useAppTheme();
+  const { t } = useTranslation();
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [selectedAddons, setSelectedAddons] = useState([]);
 
@@ -49,84 +54,113 @@ export default function ItemConfigModal({ visible, item, onClose, onAddToCart })
     onClose();
   };
 
+  const selectedOptionStyle = {
+    borderColor: theme.buttonColor,
+    backgroundColor: `${theme.buttonColor}18`,
+  };
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <View style={styles.handle} />
-          <Text style={styles.title}>{item.name}</Text>
+          <Text style={[styles.title, { color: theme.textColor }]}>{item.name}</Text>
           <Text style={styles.subtitle}>
-            Base price: {formatCurrency(item.basePrice)}
-            {hasVariants ? ' (variant replaces base)' : ''}
+            {t('basePriceLabel', { price: formatCurrency(item.basePrice) })}
+            {hasVariants ? t('variantReplacesBase') : ''}
           </Text>
 
           <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
             {hasVariants && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Select a variant *</Text>
-                {item.variants.map((variant) => (
-                  <TouchableOpacity
-                    key={variant.name}
-                    style={[
-                      styles.optionRow,
-                      selectedVariant?.name === variant.name && styles.optionSelected,
-                    ]}
-                    onPress={() => setSelectedVariant(variant)}
-                  >
-                    <View style={styles.radioOuter}>
-                      {selectedVariant?.name === variant.name && (
-                        <View style={styles.radioInner} />
-                      )}
-                    </View>
-                    <Text style={styles.optionName}>{variant.name}</Text>
-                    <Text style={styles.optionPrice}>{formatCurrency(variant.price)}</Text>
-                  </TouchableOpacity>
-                ))}
+                <Text style={[styles.sectionTitle, { color: theme.textColor }]}>
+                  {t('selectVariant')}
+                </Text>
+                {item.variants.map((variant) => {
+                  const isSelected = selectedVariant?.name === variant.name;
+                  return (
+                    <TouchableOpacity
+                      key={variant.name}
+                      style={[styles.optionRow, isSelected && selectedOptionStyle]}
+                      onPress={() => setSelectedVariant(variant)}
+                    >
+                      <View style={[styles.radioOuter, { borderColor: theme.buttonColor }]}>
+                        {isSelected ? (
+                          <View style={[styles.radioInner, { backgroundColor: theme.buttonColor }]} />
+                        ) : null}
+                      </View>
+                      <Text style={[styles.optionName, { color: theme.textColor }]}>
+                        {variant.name}
+                      </Text>
+                      <Text style={[styles.optionPrice, { color: theme.buttonColor }]}>
+                        {formatCurrency(variant.price)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
 
             {hasAddons && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Add-ons (optional)</Text>
-                {item.addons.map((addon) => (
-                  <TouchableOpacity
-                    key={addon.name}
-                    style={[
-                      styles.optionRow,
-                      isAddonSelected(addon) && styles.optionSelected,
-                    ]}
-                    onPress={() => toggleAddon(addon)}
-                  >
-                    <View style={[styles.checkbox, isAddonSelected(addon) && styles.checkboxChecked]}>
-                      {isAddonSelected(addon) && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                    <Text style={styles.optionName}>{addon.name}</Text>
-                    <Text style={styles.optionPrice}>+{formatCurrency(addon.price)}</Text>
-                  </TouchableOpacity>
-                ))}
+                <Text style={[styles.sectionTitle, { color: theme.textColor }]}>
+                  {t('addonsOptional')}
+                </Text>
+                {item.addons.map((addon) => {
+                  const selected = isAddonSelected(addon);
+                  return (
+                    <TouchableOpacity
+                      key={addon.name}
+                      style={[styles.optionRow, selected && selectedOptionStyle]}
+                      onPress={() => toggleAddon(addon)}
+                    >
+                      <View
+                        style={[
+                          styles.checkbox,
+                          { borderColor: theme.buttonColor },
+                          selected && { backgroundColor: theme.buttonColor },
+                        ]}
+                      >
+                        {selected ? <Text style={styles.checkmark}>✓</Text> : null}
+                      </View>
+                      <Text style={[styles.optionName, { color: theme.textColor }]}>
+                        {addon.name}
+                      </Text>
+                      <Text style={[styles.optionPrice, { color: theme.buttonColor }]}>
+                        +{formatCurrency(addon.price)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
 
             {!hasVariants && !hasAddons && (
-              <Text style={styles.noOptions}>No variants or add-ons. Tap Add to cart.</Text>
+              <Text style={styles.noOptions}>{t('noVariantsAddons')}</Text>
             )}
           </ScrollView>
 
           <View style={styles.footer}>
-            <Text style={styles.totalLabel}>Item total</Text>
-            <Text style={styles.totalValue}>{formatCurrency(previewPrice)}</Text>
+            <Text style={styles.totalLabel}>{t('itemTotal')}</Text>
+            <Text style={[styles.totalValue, { color: theme.textColor }]}>
+              {formatCurrency(previewPrice)}
+            </Text>
           </View>
 
           <View style={styles.actions}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{t('cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.addBtn, !canAdd && styles.addBtnDisabled]}
+              style={[
+                styles.addBtn,
+                { backgroundColor: theme.buttonColor },
+                !canAdd && styles.addBtnDisabled,
+              ]}
               onPress={handleAdd}
               disabled={!canAdd}
             >
-              <Text style={styles.addText}>Add to Cart</Text>
+              <Text style={styles.addText}>{t('addToCart')}</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -138,34 +172,34 @@ export default function ItemConfigModal({ visible, item, onClose, onAddToCart })
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(17,24,39,0.45)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: UI.surface,
+    borderTopLeftRadius: UI.radiusXl,
+    borderTopRightRadius: UI.radiusXl,
     maxHeight: '85%',
-    paddingHorizontal: 20,
-    paddingBottom: 28,
+    paddingHorizontal: 24,
+    paddingBottom: 32,
   },
   handle: {
-    width: 40,
+    width: 32,
     height: 4,
-    backgroundColor: '#ddd',
+    backgroundColor: UI.border,
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 12,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   title: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
-    color: '#1a1a2e',
+    letterSpacing: -0.3,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6c757d',
+    color: UI.textMuted,
     marginTop: 4,
     marginBottom: 16,
   },
@@ -178,29 +212,23 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#16213e',
     marginBottom: 10,
   },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    borderRadius: 10,
-    backgroundColor: '#f8f9fa',
+    borderRadius: UI.radiusMd,
+    backgroundColor: UI.surfaceMuted,
     marginBottom: 8,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: 'transparent',
-  },
-  optionSelected: {
-    borderColor: '#e94560',
-    backgroundColor: '#fff0f3',
   },
   radioOuter: {
     width: 22,
     height: 22,
     borderRadius: 11,
     borderWidth: 2,
-    borderColor: '#e94560',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -209,20 +237,15 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#e94560',
   },
   checkbox: {
     width: 22,
     height: 22,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#e94560',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-  },
-  checkboxChecked: {
-    backgroundColor: '#e94560',
   },
   checkmark: {
     color: '#fff',
@@ -232,12 +255,10 @@ const styles = StyleSheet.create({
   optionName: {
     flex: 1,
     fontSize: 16,
-    color: '#1a1a2e',
   },
   optionPrice: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#e94560',
   },
   noOptions: {
     fontSize: 15,
@@ -261,7 +282,6 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1a1a2e',
   },
   actions: {
     flexDirection: 'row',
@@ -284,11 +304,10 @@ const styles = StyleSheet.create({
     flex: 2,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#e94560',
     alignItems: 'center',
   },
   addBtnDisabled: {
-    backgroundColor: '#f4a5b4',
+    opacity: 0.45,
   },
   addText: {
     fontSize: 16,

@@ -1,10 +1,10 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, dialog } = require('electron');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const isProd = process.argv.includes('--prod');
-const APP_NAME = 'GEET app';
+const isProd = app.isPackaged || process.argv.includes('--prod');
+const APP_NAME = 'NAM bill';
 const WEB_PORT = process.env.WEB_PORT || 8085;
 const WEB_URL = `http://127.0.0.1:${WEB_PORT}`;
 const DIST_DIR = path.join(__dirname, '../dist');
@@ -24,6 +24,10 @@ let mainWindow;
 let staticServer;
 
 app.setName(APP_NAME);
+
+function showStartupError(title, message) {
+  dialog.showErrorBox(title, message);
+}
 
 function startStaticServer(rootDir) {
   return new Promise((resolve, reject) => {
@@ -95,7 +99,10 @@ function createWindow() {
 
 async function startProdApp() {
   if (!fs.existsSync(path.join(DIST_DIR, 'index.html'))) {
-    console.error('Build not found. Run: npm run desktop:build');
+    showStartupError(
+      `${APP_NAME} could not start`,
+      'App files are missing. Reinstall NAM bill from the latest installer, or rebuild with: npm run desktop:installer'
+    );
     app.quit();
     return;
   }
@@ -105,6 +112,10 @@ async function startProdApp() {
     await mainWindow.loadURL(url);
   } catch (error) {
     console.error('Failed to start desktop app:', error);
+    showStartupError(
+      `${APP_NAME} could not start`,
+      `Failed to load the app: ${error.message || error}`
+    );
     app.quit();
   }
 }
@@ -124,6 +135,14 @@ async function loadDevServer() {
 
   console.error('Could not connect to Expo web server at', WEB_URL);
   console.error('Run in another terminal: npm run web');
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+  }
+  showStartupError(
+    `${APP_NAME} could not connect`,
+    `Could not reach the development server at ${WEB_URL}.\n\nOpen a terminal in the project folder and run:\n  npm run web\n\nThen start the desktop app again with:\n  npm run desktop`
+  );
 }
 
 app.whenReady().then(() => {

@@ -7,15 +7,22 @@ import {
   StyleSheet,
   Pressable,
 } from 'react-native';
+import { useAppTheme } from '../utils/theme';
+import { useTranslation } from '../utils/i18n';
+import { UI, cardStyle } from '../utils/uiTheme';
 
 export default function ConfirmModal({
   visible,
   title,
   message,
   confirmLabel = 'OK',
+  cancelLabel,
   onConfirm,
   onCancel,
 }) {
+  const theme = useAppTheme();
+  const { t } = useTranslation();
+
   return (
     <Modal
       visible={visible}
@@ -25,13 +32,16 @@ export default function ConfirmModal({
     >
       <Pressable style={styles.overlay} onPress={onCancel}>
         <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.title}>{title}</Text>
+          <Text style={[styles.title, { color: theme.textColor }]}>{title}</Text>
           {message ? <Text style={styles.message}>{message}</Text> : null}
           <View style={styles.actions}>
             <TouchableOpacity style={[styles.btn, styles.cancelBtn]} onPress={onCancel}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{cancelLabel || t('cancel')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.btn, styles.confirmBtn]} onPress={onConfirm}>
+            <TouchableOpacity
+              style={[styles.btn, { backgroundColor: theme.buttonColor }]}
+              onPress={onConfirm}
+            >
               <Text style={styles.confirmText}>{confirmLabel}</Text>
             </TouchableOpacity>
           </View>
@@ -44,27 +54,25 @@ export default function ConfirmModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(17,24,39,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   card: {
     width: '100%',
-    maxWidth: 340,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 22,
+    maxWidth: 320,
+    ...cardStyle({ padding: 24, borderRadius: UI.radiusXl }),
   },
   title: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#1a1a2e',
     marginBottom: 8,
+    letterSpacing: -0.2,
   },
   message: {
     fontSize: 15,
-    color: '#495057',
+    color: UI.textSecondary,
     lineHeight: 22,
     marginBottom: 20,
   },
@@ -75,18 +83,17 @@ const styles = StyleSheet.create({
   btn: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: UI.radiusSm,
     alignItems: 'center',
   },
   cancelBtn: {
-    backgroundColor: '#f1f3f5',
-  },
-  confirmBtn: {
-    backgroundColor: '#e94560',
+    backgroundColor: UI.surfaceMuted,
+    borderWidth: 1,
+    borderColor: UI.border,
   },
   cancelText: {
-    color: '#495057',
-    fontWeight: '600',
+    color: UI.textSecondary,
+    fontWeight: '700',
     fontSize: 15,
   },
   confirmText: {

@@ -1,12 +1,16 @@
 {
   "name": "pos-billing",
   "version": "1.0.0",
-  "description": "GEET app (Expo + Electron desktop wrapper).",
-  "author": "GEET app",
+  "description": "NAM bill (Expo + Electron desktop wrapper).",
+  "author": "NAM bill",
   "main": "expo/AppEntry.js",
   "scripts": {
     "start": "expo start",
-    "mobile": "expo start --lan --clear",
+    "mobile": "powershell -ExecutionPolicy Bypass -File scripts/start-expo-mobile.ps1 -Mode lan",
+    "mobile:tunnel": "powershell -ExecutionPolicy Bypass -File scripts/start-expo-mobile.ps1 -Mode tunnel",
+    "mobile:usb": "powershell -ExecutionPolicy Bypass -File scripts/start-expo-mobile.ps1 -Mode usb",
+    "mobile:firewall": "powershell -ExecutionPolicy Bypass -File scripts/allow-expo-firewall.ps1",
+    "mobile:stop": "powershell -ExecutionPolicy Bypass -File scripts/stop-expo-mobile.ps1",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web --port 8085",
@@ -14,11 +18,12 @@
     "desktop:build": "expo export --platform web --output-dir dist && npm exec -- electron electron/main.js --prod",
     "desktop:installer": "node scripts/clean-electron-release.js && expo export --platform web --output-dir dist && electron-builder --win nsis --config.directories.output=%LOCALAPPDATA%\\\\POSBilling\\\\release",
     "build:apk": "eas build --platform android --profile preview",
-    "ppt:demo": "node scripts/generate-demo-ppt.js"
+    "ppt:demo": "node scripts/generate-demo-ppt.js",
+    "ppt:sales": "node scripts/generate-sales-ppt.js"
   },
   "build": {
     "appId": "com.riye.posbilling.desktop",
-    "productName": "GEET app",
+    "productName": "NAM bill",
     "directories": {
       "output": "release"
     },
@@ -43,17 +48,21 @@
     }
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
-    "@react-navigation/bottom-tabs": "^7.3.10",
-    "@react-navigation/native": "^7.1.6",
-    "@react-navigation/native-stack": "^7.3.10",
+    "@react-native-community/netinfo": "11.4.1",
+    "@react-navigation/bottom-tabs": "^7.18.5",
+    "@react-navigation/native": "^7.3.5",
+    "@react-navigation/native-stack": "^7.17.7",
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.35",
     "expo-asset": "~12.0.13",
     "expo-build-properties": "~1.0.10",
+    "expo-clipboard": "~8.0.8",
     "expo-file-system": "~19.0.23",
     "expo-font": "~14.0.12",
+    "expo-image-picker": "~17.0.11",
     "expo-intent-launcher": "~13.0.8",
     "expo-print": "~15.0.8",
     "expo-sharing": "~14.0.8",
@@ -71,6 +80,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@expo/ngrok": "^4.1.3",
     "@types/react": "~19.1.10",
     "concurrently": "^9.2.0",
     "eas-cli": "^20.1.0",
