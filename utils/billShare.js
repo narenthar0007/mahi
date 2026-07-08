@@ -1,14 +1,24 @@
 import { Linking, Platform, Alert } from 'react-native';
 import { formatCurrency } from './currency';
+import { translate, DEFAULT_LANGUAGE } from './i18n/translations';
 
 export const CUSTOMER_PHONE_PATTERN = /^[6-9]\d{9}$/;
+export const CUSTOMER_PHONE_MAX_LENGTH = 12;
 
 export function sanitizeCustomerPhoneInput(value = '') {
   let digits = String(value).replace(/\D/g, '');
 
-  if (digits.length > 10 && digits.startsWith('91')) {
-    digits = digits.slice(2);
-  } else if (digits.length > 10 && digits.startsWith('0')) {
+  // Only treat 91 as country code when the user entered more than 10 digits.
+  // Otherwise numbers like 9123456789 (valid 10-digit mobile) get stuck at "912".
+  if (digits.startsWith('91') && digits.length > 10) {
+    const localPart = digits.slice(2);
+    if (localPart.length > 0 && !/^[6-9]/.test(localPart)) {
+      return digits.length <= 2 ? digits.slice(0, 2) : `91${localPart.slice(0, 1)}`;
+    }
+    return `91${localPart.slice(0, 10)}`.slice(0, CUSTOMER_PHONE_MAX_LENGTH);
+  }
+
+  if (digits.length === 11 && digits.startsWith('0')) {
     digits = digits.slice(1);
   }
 
@@ -19,14 +29,30 @@ export function sanitizeCustomerPhoneInput(value = '') {
   return digits.slice(0, 10);
 }
 
-export function isValidCustomerPhone(phone = '') {
-  return CUSTOMER_PHONE_PATTERN.test(String(phone).trim());
+export function getCustomerPhoneLocalPart(phone = '') {
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1);
+  return digits;
 }
 
-export function getCustomerPhoneValidationMessage(phone = '') {
-  if (!String(phone).trim()) return 'Enter customer WhatsApp number.';
+export function isValidCustomerPhone(phone = '') {
+  return CUSTOMER_PHONE_PATTERN.test(getCustomerPhoneLocalPart(phone));
+}
+
+export function normalizePhoneNumber(phone) {
+  if (!phone?.trim()) return '';
+
+  const localPart = getCustomerPhoneLocalPart(phone);
+  if (!CUSTOMER_PHONE_PATTERN.test(localPart)) return '';
+
+  return `91${localPart}`;
+}
+
+export function getCustomerPhoneValidationMessage(phone = '', language = DEFAULT_LANGUAGE) {
+  if (!String(phone).trim()) return translate(language, 'enterCustomerPhone');
   if (!isValidCustomerPhone(phone)) {
-    return 'Customer number must be 10 digits and start with 6, 7, 8, or 9.';
+    return translate(language, 'invalidCustomerPhone');
   }
   return '';
 }
@@ -117,38 +143,22 @@ export const formatOrderReadyMessage = ({
   return lines.join('\n');
 };
 
-export function normalizePhoneNumber(phone) {
-  if (!phone?.trim()) return '';
-
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length === 10 && isValidCustomerPhone(digits)) return `91${digits}`;
-  if (digits.length === 12 && digits.startsWith('91') && isValidCustomerPhone(digits.slice(2))) {
-    return digits;
-  }
-  if (digits.length === 11 && digits.startsWith('0') && isValidCustomerPhone(digits.slice(1))) {
-    return `91${digits.slice(1)}`;
-  }
-  return '';
-}
-
 export const sendViaWhatsApp = async (message, phoneNumber = '') => {
-  const encoded = encodeURIComponent(message);
   const phone = normalizePhoneNumber(phoneNumber);
+  const safeMessage = String(message || '').slice(0, 2800);
+  const encoded = encodeURIComponent(safeMessage);
 
-  const appUrl = phone
-    ? `whatsapp://send?phone=${phone}&text=${encoded}`
-    : `whatsapp://send?text=${encoded}`;
-  const webUrl = phone
+  const url = phone
     ? `https://wa.me/${phone}?text=${encoded}`
     : `https://wa.me/?text=${encoded}`;
 
   try {
-    const canOpenApp = await Linking.canOpenURL(appUrl);
-    await Linking.openURL(canOpenApp ? appUrl : webUrl);
-  } catch {
+    await Linking.openURL(url);
+  } catch (error) {
+    console.warn('WhatsApp open failed:', error);
     Alert.alert(
       'WhatsApp unavailable',
-      'Could not open WhatsApp. Please install it or use Messages instead.'
+      'Could not open WhatsApp. Install WhatsApp or share the bill from Order History.'
     );
   }
 };

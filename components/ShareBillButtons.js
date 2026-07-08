@@ -1,84 +1,179 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { sendViaMessage, sendViaWhatsApp, formatBillText } from '../utils/billShare';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { shareOrderInvoicePdf, shareWhatsAppInvoiceText } from '../utils/invoiceExport';
+import { isValidCustomerPhone } from '../utils/billShare';
+import { showAlert } from '../utils/alert';
 import useStore from '../store/store';
+import { useAppTheme } from '../utils/theme';
+import { useTranslation } from '../utils/i18n';
+import { UI } from '../utils/uiTheme';
 
 export default function ShareBillButtons({
   items,
   totalAmount,
+  subtotalAmount,
+  cartSubtotal,
+  discountAmount = 0,
+  offerApplied = false,
+  offerName = '',
+  taxEnabled = false,
+  cgstAmount = 0,
+  sgstAmount = 0,
   timestamp,
   orderId,
   title = 'POS Bill',
   compact = false,
   customerPhone = '',
-  disabled = false,
 }) {
+  const { t } = useTranslation();
+  const showWhatsAppInvoiceButtons = useStore((s) => s.showWhatsAppInvoiceButtons);
   const shopName = useStore((s) => s.shopName);
+  const fssaiNumber = useStore((s) => s.fssaiNumber);
+  const gstinNumber = useStore((s) => s.gstinNumber);
+  const theme = useAppTheme();
+  const [sharingInvoice, setSharingInvoice] = useState(false);
+  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
 
-  const billText = formatBillText({
+  if (showWhatsAppInvoiceButtons === false) {
+    return null;
+  }
+
+  const invoicePayload = {
     items,
     totalAmount,
+    subtotalAmount,
+    cartSubtotal,
+    discountAmount,
+    offerApplied,
+    offerName,
+    taxEnabled,
+    cgstAmount,
+    sgstAmount,
     timestamp,
     orderId,
-    title,
     shopName,
-  });
+    fssaiNumber,
+    gstinNumber,
+    customerPhone,
+    title: 'Tax Invoice',
+  };
+
+  const handleShareWhatsAppBill = async () => {
+    if (sharingWhatsApp) return;
+
+    if (!isValidCustomerPhone(customerPhone)) {
+      showAlert(t('noWhatsAppNumber'), t('noWhatsAppNumberMsg'));
+      return;
+    }
+
+    setSharingWhatsApp(true);
+    try {
+      await shareWhatsAppInvoiceText(invoicePayload);
+    } catch (error) {
+      console.error('WhatsApp bill failed:', error);
+      showAlert(t('whatsAppFailed'), t('whatsAppFailedMsg'));
+    } finally {
+      setSharingWhatsApp(false);
+    }
+  };
+
+  const handleSharePdfInvoice = async () => {
+    if (sharingInvoice) return;
+
+    setSharingInvoice(true);
+    try {
+      const result = await shareOrderInvoicePdf({
+        ...invoicePayload,
+        openWhatsAppChat: false,
+        sharePdf: true,
+      });
+
+      if (!result.pdfShared) {
+        showAlert(t('invoiceFailed'), t('invoiceFailedMsg'));
+      }
+    } catch (error) {
+      console.error('PDF invoice share failed:', error);
+      showAlert(t('invoiceFailed'), t('invoiceFailedMsg'));
+    } finally {
+      setSharingInvoice(false);
+    }
+  };
 
   return (
-    <View style={[styles.row, compact && styles.rowCompact]}>
+    <View style={[styles.wrapper, compact && styles.wrapperCompact]}>
       <TouchableOpacity
-        style={[styles.btn, styles.whatsappBtn, disabled && styles.btnDisabled]}
-        onPress={() => sendViaWhatsApp(billText, customerPhone)}
-        disabled={disabled}
+        style={[
+          styles.whatsAppBtn,
+          { borderColor: theme.buttonColor },
+          sharingWhatsApp && styles.btnDisabled,
+        ]}
+        onPress={handleShareWhatsAppBill}
+        disabled={sharingWhatsApp}
       >
-        <Text style={[styles.btnText, disabled && styles.btnTextDisabled]}>WhatsApp</Text>
+        {sharingWhatsApp ? (
+          <ActivityIndicator color={theme.buttonColor} size="small" />
+        ) : (
+          <Text style={[styles.whatsAppBtnText, { color: theme.buttonColor }]}>
+            {t('sendWhatsAppBill')}
+          </Text>
+        )}
       </TouchableOpacity>
+
       <TouchableOpacity
-        style={[styles.btn, styles.messageBtn, disabled && styles.btnDisabled]}
-        onPress={() => sendViaMessage(billText, customerPhone)}
-        disabled={disabled}
+        style={[
+          styles.invoiceBtn,
+          { backgroundColor: theme.headerColor },
+          sharingInvoice && styles.btnDisabled,
+        ]}
+        onPress={handleSharePdfInvoice}
+        disabled={sharingInvoice}
       >
-        <Text style={[styles.btnText, disabled && styles.btnTextDisabled]}>Message</Text>
+        {sharingInvoice ? (
+          <ActivityIndicator color="#fff" size="small" />
+        ) : (
+          <Text style={styles.invoiceBtnText}>{t('sharePdfInvoice')}</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    gap: 10,
+  wrapper: {
     marginTop: 12,
+    gap: 8,
   },
-  rowCompact: {
+  wrapperCompact: {
     marginTop: 8,
   },
-  btn: {
-    flex: 1,
-    flexDirection: 'row',
+  whatsAppBtn: {
+    backgroundColor: UI.surface,
+    borderRadius: UI.radiusMd,
+    borderWidth: 1,
+    borderColor: UI.border,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    gap: 6,
-    minHeight: 42,
+    minHeight: 44,
   },
-  whatsappBtn: {
-    backgroundColor: '#25D366',
-  },
-  messageBtn: {
-    backgroundColor: '#228be6',
-  },
-  btnDisabled: {
-    backgroundColor: '#ced4da',
-  },
-  btnText: {
-    color: '#fff',
+  whatsAppBtnText: {
     fontSize: 13,
     fontWeight: '700',
   },
-  btnTextDisabled: {
-    color: '#6c757d',
+  invoiceBtn: {
+    backgroundColor: '#111827',
+    borderRadius: UI.radiusMd,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  btnDisabled: {
+    opacity: 0.7,
+  },
+  invoiceBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

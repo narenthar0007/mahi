@@ -1,4 +1,9 @@
 import { Share, Platform } from 'react-native';
+import {
+  buildExportLogoHtml,
+  getExportLogoCss,
+  resolveShopLogo,
+} from './shopLogo';
 
 async function downloadOnWeb(content, fileName, mimeType) {
   const blob = new Blob([content], { type: mimeType });
@@ -124,8 +129,16 @@ export function ordersToCsv(orders, shopName = '') {
   ].join('\n');
 }
 
-export function ordersToHtmlTable(orders, shopName = '', fromLabel = '', toLabel = '') {
+export function ordersToHtmlTable(
+  orders,
+  shopName = '',
+  fromLabel = '',
+  toLabel = '',
+  { shopLogoUri, shopLogoStyle, fssaiNumber = '', gstinNumber = '' } = {}
+) {
   const { totalRevenue, totalItems, orderCount } = getExportSummary(orders);
+  const logo = resolveShopLogo({ shopLogoUri, shopLogoStyle });
+  const logoHtml = buildExportLogoHtml(logo, shopName || 'Shop');
 
   const summaryRows = orders
     .map((order) => {
@@ -177,10 +190,26 @@ export function ordersToHtmlTable(orders, shopName = '', fromLabel = '', toLabel
     th { background: #1a1a2e; color: #fff; }
     tr:nth-child(even) { background: #f8f9fa; }
     .totals { font-weight: bold; background: #fff0f3; }
+    .report-header { text-align: center; margin-bottom: 8px; }
+    .shop-meta { text-align: center; color: #495057; font-size: 12px; margin-bottom: 16px; }
+    ${getExportLogoCss()}
   </style>
 </head>
 <body>
-  <h1>${escapeHtml(shopName || 'POS')} — Order Report</h1>
+  ${logoHtml}
+  <div class="report-header">
+    <h1>${escapeHtml(shopName || 'POS')} — Order Report</h1>
+  </div>
+  ${
+    fssaiNumber
+      ? `<div class="shop-meta">FSSAI No: ${escapeHtml(fssaiNumber)}</div>`
+      : ''
+  }
+  ${
+    gstinNumber
+      ? `<div class="shop-meta">GSTIN: ${escapeHtml(gstinNumber)}</div>`
+      : ''
+  }
   <p class="meta">Period: ${escapeHtml(fromLabel)} to ${escapeHtml(toLabel)}</p>
 
   <h2>Order Summary</h2>
@@ -237,26 +266,84 @@ export async function shareWithFile(content, fileName, mimeType, dialogTitle) {
   await Share.share({ message: content, title: dialogTitle });
 }
 
-export async function shareOrderExport({ orders, shopName, fromDate, toDate, format = 'html' }) {
+async function sharePdfReport(html, fileName, dialogTitle) {
+  if (Platform.OS === 'web') {
+    const Print = await import('expo-print');
+    const { uri } = await Print.printToFileAsync({ html });
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  const Print = await import('expo-print');
+  const FileSystem = await import('expo-file-system/legacy');
+  const Sharing = await import('expo-sharing');
+  const { uri } = await Print.printToFileAsync({ html });
+  const destUri = `${FileSystem.cacheDirectory}${fileName}`;
+  const existing = await FileSystem.getInfoAsync(destUri);
+  if (existing.exists) {
+    await FileSystem.deleteAsync(destUri, { idempotent: true });
+  }
+  await FileSystem.copyAsync({ from: uri, to: destUri });
+
+  const pdfInfo = await FileSystem.getInfoAsync(destUri);
+  if (!pdfInfo.exists || Number(pdfInfo.size || 0) <= 0) {
+    throw new Error('pdf_missing_or_empty');
+  }
+
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(destUri, {
+      mimeType: 'application/pdf',
+      UTI: 'com.adobe.pdf',
+      dialogTitle,
+    });
+    return;
+  }
+
+  await Share.share({ url: destUri, title: dialogTitle });
+}
+
+export async function shareOrderExport({
+  orders,
+  shopName,
+  fromDate,
+  toDate,
+  format = 'csv',
+  shopLogoUri,
+  shopLogoStyle,
+  fssaiNumber,
+  gstinNumber,
+}) {
   const fromLabel = fromDate.toLocaleDateString();
   const toLabel = toDate.toLocaleDateString();
   const stamp = `${fromDate.toISOString().slice(0, 10)}_to_${toDate.toISOString().slice(0, 10)}`;
+  const logoOptions = { shopLogoUri, shopLogoStyle, fssaiNumber, gstinNumber };
+  const dialogTitle = `Export Orders (${fromLabel} – ${toLabel})`;
 
-  const isHtml = format === 'html';
-  const content = isHtml
-    ? ordersToHtmlTable(orders, shopName, fromLabel, toLabel)
-    : ordersToCsv(orders, shopName);
+  if (format === 'pdf') {
+    const html = ordersToHtmlTable(orders, shopName, fromLabel, toLabel, logoOptions);
+    const fileName = `orders_${stamp}.pdf`;
+    await sharePdfReport(html, fileName, dialogTitle);
+    return;
+  }
 
-  const extension = isHtml ? 'html' : 'csv';
-  const mimeType = isHtml ? 'text/html' : 'text/csv';
-  const fileName = `orders_${stamp}.${extension}`;
+  if (format === 'html') {
+    const html = ordersToHtmlTable(orders, shopName, fromLabel, toLabel, logoOptions);
+    const fileName = `orders_${stamp}.html`;
+    await shareWithFile(html, fileName, 'text/html', dialogTitle);
+    return;
+  }
 
-  await shareWithFile(
-    content,
-    fileName,
-    mimeType,
-    `Export Orders (${fromLabel} – ${toLabel})`
-  );
+  const content = ordersToCsv(orders, shopName);
+  const fileName = `orders_${stamp}.csv`;
+
+  await shareWithFile(content, fileName, 'text/csv', dialogTitle);
 }
 
 export function getExportSummary(orders) {

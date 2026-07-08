@@ -1,23 +1,25 @@
 {
   "expo": {
-    "name": "GEET app",
+    "name": "NAM bill",
     "slug": "pos-billing",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "updates": {
+      "enabled": false,
+      "fallbackToCacheTimeout": 0
+    },
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0B132B"
+      "backgroundColor": "#F5F5F0"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.riye.posbilling",
       "infoPlist": {
         "LSApplicationQueriesSchemes": [
-          "whatsapp",
-          "sms",
           "whatsapp",
           "sms"
         ],
@@ -27,22 +29,48 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0B132B"
+        "backgroundColor": "#F5F5F0"
       },
       "package": "com.riye.posbilling",
-      "versionCode": 1,
+      "versionCode": 4,
+      "softwareKeyboardLayoutMode": "resize",
+      "edgeToEdgeEnabled": true,
       "permissions": [
         "INTERNET"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "name": "NAM bill",
+      "shortName": "NAM bill",
+      "themeColor": "#102A44",
+      "backgroundColor": "#F5F5F0"
     },
     "plugins": [
       "expo-asset",
       "expo-font",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "manifestQueries": {
+              "package": ["com.whatsapp", "com.whatsapp.w4b"],
+              "intent": [
+                {
+                  "action": "android.intent.action.VIEW",
+                  "data": { "scheme": "https" }
+                },
+                {
+                  "action": "android.intent.action.VIEW",
+                  "data": { "scheme": "whatsapp" }
+                }
+              ]
+            }
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {
