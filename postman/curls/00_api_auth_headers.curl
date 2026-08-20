@@ -1,0 +1,16 @@
+# API auth — Generate credentials in Settings, then use:
+#   Body field: appUniqueKey  (required — identifies the app)
+#   Headers: tokens (verified against that unique key)
+
+curl --location 'http://localhost:3000/api/items' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+    "appUniqueKey": "WSE6HS7J77",
+    "name": "Example Item",
+    "basePrice": 10
+  }'

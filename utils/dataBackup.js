@@ -2,6 +2,7 @@ import { Platform, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { resolveTheme } from './theme';
 import { normalizeShopOffer } from './offers';
+import { normalizeUpiQrUri } from './upiQr';
 
 export const BACKUP_VERSION = 1;
 export const BACKUP_APP_ID = 'geet-pos';
@@ -17,12 +18,25 @@ export function buildBackupPayload(state) {
     theme: state.theme || {},
     language: state.language || 'en',
     showWhatsAppInvoiceButtons: state.showWhatsAppInvoiceButtons !== false,
+    enableTables: state.enableTables !== false,
+    enableWeightBasedPricing: Boolean(state.enableWeightBasedPricing),
+    enableVariablePriceItems: Boolean(state.enableVariablePriceItems),
     shopOffer: state.shopOffer || {},
     menuListView: Boolean(state.menuListView),
-    ownerToken: state.ownerToken || '',
+    appearanceMode: state.appearanceMode === 'dark' ? 'dark' : 'light',
+    upiQrUri: normalizeUpiQrUri(state.upiQrUri),
+    shopWebsite: state.shopWebsite || '',
+    menuWebsite: state.menuWebsite || '',
+    includeWebsitesInWhatsApp: Boolean(state.includeWebsitesInWhatsApp),
+    apiUniqueKey: state.apiUniqueKey || '',
+    apiAppKey: state.apiAppKey || '',
+    apiSecretToken: state.apiSecretToken || '',
+    apiClientToken: state.apiClientToken || '',
     orderSequence: Number(state.orderSequence) || 0,
     inventory: Array.isArray(state.inventory) ? state.inventory : [],
     history: Array.isArray(state.history) ? state.history : [],
+    tables: Array.isArray(state.tables) ? state.tables : [],
+    waitlist: Array.isArray(state.waitlist) ? state.waitlist : [],
   };
 }
 
@@ -65,12 +79,25 @@ export function normalizeImportedBackup(raw) {
     theme: resolveTheme(data.theme),
     language: typeof data.language === 'string' ? data.language : 'en',
     showWhatsAppInvoiceButtons: data.showWhatsAppInvoiceButtons !== false,
+    enableTables: data.enableTables !== false,
+    enableWeightBasedPricing: Boolean(data.enableWeightBasedPricing),
+    enableVariablePriceItems: Boolean(data.enableVariablePriceItems),
     shopOffer: normalizeShopOffer(data.shopOffer),
     menuListView: Boolean(data.menuListView),
-    ownerToken: typeof data.ownerToken === 'string' ? data.ownerToken.trim() : '',
+    appearanceMode: data.appearanceMode === 'dark' ? 'dark' : 'light',
+    upiQrUri: normalizeUpiQrUri(data.upiQrUri),
+    shopWebsite: typeof data.shopWebsite === 'string' ? data.shopWebsite.trim() : '',
+    menuWebsite: typeof data.menuWebsite === 'string' ? data.menuWebsite.trim() : '',
+    includeWebsitesInWhatsApp: Boolean(data.includeWebsitesInWhatsApp),
+    apiUniqueKey: typeof data.apiUniqueKey === 'string' ? data.apiUniqueKey.trim() : '',
+    apiAppKey: typeof data.apiAppKey === 'string' ? data.apiAppKey.trim() : '',
+    apiSecretToken: typeof data.apiSecretToken === 'string' ? data.apiSecretToken.trim() : '',
+    apiClientToken: typeof data.apiClientToken === 'string' ? data.apiClientToken.trim() : '',
     orderSequence: Number(data.orderSequence) || 0,
     inventory: data.inventory,
     history: data.history,
+    tables: Array.isArray(data.tables) ? data.tables : [],
+    waitlist: Array.isArray(data.waitlist) ? data.waitlist : [],
   };
 }
 

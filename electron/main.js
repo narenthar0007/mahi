@@ -1,7 +1,8 @@
-const { app, BrowserWindow, shell, dialog } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const syncServer = require('./syncServer');
 
 const isProd = app.isPackaged || process.argv.includes('--prod');
 const APP_NAME = 'NAM bill';
@@ -64,6 +65,36 @@ function startStaticServer(rootDir) {
   });
 }
 
+function registerSyncIpc() {
+  ipcMain.handle('sync:get-local-ip', async () => syncServer.getLocalIp());
+
+  ipcMain.handle('sync:start-server', async (_event, { port, token }) => {
+    const info = syncServer.startServer(port, token, (payload) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('sync:client-event', payload);
+      }
+    });
+    return { ok: true, ...info };
+  });
+
+  ipcMain.handle('sync:stop-server', async () => {
+    syncServer.stopServer();
+    return { ok: true };
+  });
+
+  ipcMain.handle('sync:broadcast', async (_event, { message, exceptId }) => {
+    syncServer.broadcast(message, exceptId || null);
+    return { ok: true, count: syncServer.getClientCount() };
+  });
+
+  ipcMain.handle('sync:send', async (_event, { clientId, message }) => {
+    syncServer.send(clientId, message);
+    return { ok: true };
+  });
+
+  ipcMain.handle('sync:client-count', async () => syncServer.getClientCount());
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -77,6 +108,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -146,6 +178,7 @@ async function loadDevServer() {
 }
 
 app.whenReady().then(() => {
+  registerSyncIpc();
   createWindow();
 
   app.on('activate', () => {
@@ -158,6 +191,11 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (staticServer) {
     staticServer.close();
+  }
+  try {
+    syncServer.stopServer();
+  } catch {
+    // ignore
   }
   if (process.platform !== 'darwin') {
     app.quit();

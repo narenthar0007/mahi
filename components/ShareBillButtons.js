@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { shareOrderInvoicePdf, shareWhatsAppInvoiceText } from '../utils/invoiceExport';
+import React, {
+  useCallback,
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
+
+import {
+  shareOrderInvoicePdf,
+  shareWhatsAppInvoiceText,
+} from '../utils/invoiceExport';
+
 import { isValidCustomerPhone } from '../utils/billShare';
 import { showAlert } from '../utils/alert';
 import useStore from '../store/store';
 import { useAppTheme } from '../utils/theme';
 import { useTranslation } from '../utils/i18n';
-import { UI } from '../utils/uiTheme';
+import { useThemedStyles } from '../utils/uiTheme';
 
 export default function ShareBillButtons({
   items,
@@ -24,156 +39,352 @@ export default function ShareBillButtons({
   title = 'POS Bill',
   compact = false,
   customerPhone = '',
+  isTableOrder = false,
+  tableNumber = '',
+  isPaid = false,
 }) {
-  const { t } = useTranslation();
-  const showWhatsAppInvoiceButtons = useStore((s) => s.showWhatsAppInvoiceButtons);
-  const shopName = useStore((s) => s.shopName);
-  const fssaiNumber = useStore((s) => s.fssaiNumber);
-  const gstinNumber = useStore((s) => s.gstinNumber);
-  const theme = useAppTheme();
-  const [sharingInvoice, setSharingInvoice] = useState(false);
-  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
+  const { ui, styles } =
+    useThemedStyles(createStyles);
 
-  if (showWhatsAppInvoiceButtons === false) {
+  const { t } = useTranslation();
+
+  const showWhatsAppInvoiceButtons =
+    useStore(
+      (s) => s.showWhatsAppInvoiceButtons
+    );
+
+  const shopName = useStore(
+    (s) => s.shopName
+  );
+
+  const fssaiNumber = useStore(
+    (s) => s.fssaiNumber
+  );
+
+  const gstinNumber = useStore(
+    (s) => s.gstinNumber
+  );
+
+  const shopWebsite = useStore(
+    (s) => s.shopWebsite
+  );
+
+  const menuWebsite = useStore(
+    (s) => s.menuWebsite
+  );
+
+  const includeWebsitesInWhatsApp =
+    useStore(
+      (s) =>
+        s.includeWebsitesInWhatsApp
+    );
+
+  const upiQrUri = useStore(
+    (s) => s.upiQrUri
+  );
+
+  const theme = useAppTheme();
+
+  const [sharingInvoice, setSharingInvoice] =
+    useState(false);
+
+  const [
+    sharingWhatsApp,
+    setSharingWhatsApp,
+  ] = useState(false);
+
+  /*
+   * Don't render anything when WhatsApp
+   * invoice buttons are disabled.
+   */
+  if (
+    showWhatsAppInvoiceButtons === false
+  ) {
     return null;
   }
 
-  const invoicePayload = {
-    items,
-    totalAmount,
-    subtotalAmount,
-    cartSubtotal,
-    discountAmount,
-    offerApplied,
-    offerName,
-    taxEnabled,
-    cgstAmount,
-    sgstAmount,
-    timestamp,
-    orderId,
-    shopName,
-    fssaiNumber,
-    gstinNumber,
-    customerPhone,
-    title: 'Tax Invoice',
-  };
+  /*
+   * Keep the payload stable unless one of
+   * its actual values changes.
+   */
+  const invoicePayload = useMemo(
+    () => ({
+      items,
+      totalAmount,
+      subtotalAmount,
+      cartSubtotal,
+      discountAmount,
+      offerApplied,
+      offerName,
+      taxEnabled,
+      cgstAmount,
+      sgstAmount,
+      timestamp,
+      orderId,
+      shopName,
+      fssaiNumber,
+      gstinNumber,
+      customerPhone,
+      shopWebsite,
+      menuWebsite,
+      includeWebsitesInWhatsApp,
+      upiQrUri,
+      title: 'Tax Invoice',
+      isTableOrder,
+      tableNumber,
+      isPaid,
+    }),
+    [
+      items,
+      totalAmount,
+      subtotalAmount,
+      cartSubtotal,
+      discountAmount,
+      offerApplied,
+      offerName,
+      taxEnabled,
+      cgstAmount,
+      sgstAmount,
+      timestamp,
+      orderId,
+      shopName,
+      fssaiNumber,
+      gstinNumber,
+      customerPhone,
+      shopWebsite,
+      menuWebsite,
+      includeWebsitesInWhatsApp,
+      upiQrUri,
+      isTableOrder,
+      tableNumber,
+      isPaid,
+    ]
+  );
 
-  const handleShareWhatsAppBill = async () => {
-    if (sharingWhatsApp) return;
-
-    if (!isValidCustomerPhone(customerPhone)) {
-      showAlert(t('noWhatsAppNumber'), t('noWhatsAppNumberMsg'));
-      return;
-    }
-
-    setSharingWhatsApp(true);
-    try {
-      await shareWhatsAppInvoiceText(invoicePayload);
-    } catch (error) {
-      console.error('WhatsApp bill failed:', error);
-      showAlert(t('whatsAppFailed'), t('whatsAppFailedMsg'));
-    } finally {
-      setSharingWhatsApp(false);
-    }
-  };
-
-  const handleSharePdfInvoice = async () => {
-    if (sharingInvoice) return;
-
-    setSharingInvoice(true);
-    try {
-      const result = await shareOrderInvoicePdf({
-        ...invoicePayload,
-        openWhatsAppChat: false,
-        sharePdf: true,
-      });
-
-      if (!result.pdfShared) {
-        showAlert(t('invoiceFailed'), t('invoiceFailedMsg'));
+  /*
+   * Share WhatsApp invoice.
+   */
+  const handleShareWhatsAppBill =
+    useCallback(async () => {
+      if (sharingWhatsApp) {
+        return;
       }
-    } catch (error) {
-      console.error('PDF invoice share failed:', error);
-      showAlert(t('invoiceFailed'), t('invoiceFailedMsg'));
-    } finally {
-      setSharingInvoice(false);
-    }
-  };
+
+      if (
+        !isValidCustomerPhone(
+          customerPhone
+        )
+      ) {
+        showAlert(
+          t('noWhatsAppNumber'),
+          t('noWhatsAppNumberMsg')
+        );
+        return;
+      }
+
+      setSharingWhatsApp(true);
+
+      try {
+        await shareWhatsAppInvoiceText(
+          invoicePayload
+        );
+      } catch (error) {
+        console.error(
+          'WhatsApp bill failed:',
+          error
+        );
+
+        showAlert(
+          t('whatsAppFailed'),
+          t('whatsAppFailedMsg')
+        );
+      } finally {
+        setSharingWhatsApp(false);
+      }
+    }, [
+      sharingWhatsApp,
+      customerPhone,
+      t,
+      invoicePayload,
+    ]);
+
+  /*
+   * Share PDF invoice.
+   */
+  const handleSharePdfInvoice =
+    useCallback(async () => {
+      if (sharingInvoice) {
+        return;
+      }
+
+      setSharingInvoice(true);
+
+      try {
+        const result =
+          await shareOrderInvoicePdf({
+            ...invoicePayload,
+            openWhatsAppChat: false,
+            sharePdf: true,
+          });
+
+        if (!result?.pdfShared) {
+          showAlert(
+            t('invoiceFailed'),
+            t('invoiceFailedMsg')
+          );
+        }
+      } catch (error) {
+        console.error(
+          'PDF invoice share failed:',
+          error
+        );
+
+        showAlert(
+          t('invoiceFailed'),
+          t('invoiceFailedMsg')
+        );
+      } finally {
+        setSharingInvoice(false);
+      }
+    }, [
+      sharingInvoice,
+      invoicePayload,
+      t,
+    ]);
 
   return (
-    <View style={[styles.wrapper, compact && styles.wrapperCompact]}>
+    <View
+      style={[
+        styles.wrapper,
+        compact &&
+          styles.wrapperCompact,
+      ]}
+    >
+      {/* WhatsApp Button */}
       <TouchableOpacity
         style={[
           styles.whatsAppBtn,
-          { borderColor: theme.buttonColor },
-          sharingWhatsApp && styles.btnDisabled,
+          {
+            borderColor:
+              theme.buttonColor,
+          },
+          sharingWhatsApp &&
+            styles.btnDisabled,
         ]}
-        onPress={handleShareWhatsAppBill}
+        onPress={
+          handleShareWhatsAppBill
+        }
         disabled={sharingWhatsApp}
+        activeOpacity={0.8}
       >
         {sharingWhatsApp ? (
-          <ActivityIndicator color={theme.buttonColor} size="small" />
+          <ActivityIndicator
+            color={
+              theme.buttonColor
+            }
+            size="small"
+          />
         ) : (
-          <Text style={[styles.whatsAppBtnText, { color: theme.buttonColor }]}>
+          <Text
+            style={[
+              styles.whatsAppBtnText,
+              {
+                color:
+                  theme.buttonColor,
+              },
+            ]}
+          >
             {t('sendWhatsAppBill')}
           </Text>
         )}
       </TouchableOpacity>
 
+      {/* PDF Invoice Button */}
       <TouchableOpacity
         style={[
           styles.invoiceBtn,
-          { backgroundColor: theme.headerColor },
-          sharingInvoice && styles.btnDisabled,
+          {
+            backgroundColor:
+              theme.headerColor,
+          },
+          sharingInvoice &&
+            styles.btnDisabled,
         ]}
-        onPress={handleSharePdfInvoice}
+        onPress={
+          handleSharePdfInvoice
+        }
         disabled={sharingInvoice}
+        activeOpacity={0.8}
       >
         {sharingInvoice ? (
-          <ActivityIndicator color="#fff" size="small" />
+          <ActivityIndicator
+            color="#fff"
+            size="small"
+          />
         ) : (
-          <Text style={styles.invoiceBtnText}>{t('sharePdfInvoice')}</Text>
+          <Text
+            style={
+              styles.invoiceBtnText
+            }
+          >
+            {t('sharePdfInvoice')}
+          </Text>
         )}
       </TouchableOpacity>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    marginTop: 12,
-    gap: 8,
-  },
-  wrapperCompact: {
-    marginTop: 8,
-  },
-  whatsAppBtn: {
-    backgroundColor: UI.surface,
-    borderRadius: UI.radiusMd,
-    borderWidth: 1,
-    borderColor: UI.border,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-  },
-  whatsAppBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  invoiceBtn: {
-    backgroundColor: '#111827',
-    borderRadius: UI.radiusMd,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 44,
-  },
-  btnDisabled: {
-    opacity: 0.7,
-  },
-  invoiceBtnText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-});
+/* -------------------------------------------------------------------------- */
+/*                                Styles                                      */
+/* -------------------------------------------------------------------------- */
+
+function createStyles(ui) {
+  return {
+    wrapper: {
+      marginTop: 12,
+      gap: 8,
+    },
+
+    wrapperCompact: {
+      marginTop: 8,
+    },
+
+    whatsAppBtn: {
+      backgroundColor:
+        ui.surface,
+      borderRadius: ui.radiusMd,
+      borderWidth: 1,
+      borderColor: ui.border,
+      paddingVertical: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 44,
+    },
+
+    whatsAppBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+    },
+
+    invoiceBtn: {
+      backgroundColor:
+        ui.textPrimary,
+      borderRadius: ui.radiusMd,
+      paddingVertical: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 44,
+    },
+
+    btnDisabled: {
+      opacity: 0.7,
+    },
+
+    invoiceBtnText: {
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+  };
+}

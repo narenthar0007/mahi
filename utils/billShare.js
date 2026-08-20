@@ -113,6 +113,22 @@ export const formatBillText = ({
   return lines.join('\n');
 };
 
+/** Append shop/menu website lines when enabled in Settings. */
+export function appendShopWebsiteLinks(message, {
+  includeWebsitesInWhatsApp = false,
+  shopWebsite = '',
+  menuWebsite = '',
+} = {}) {
+  if (!includeWebsitesInWhatsApp) return message;
+  const shop = String(shopWebsite || '').trim();
+  const menu = String(menuWebsite || '').trim();
+  if (!shop && !menu) return message;
+  const extra = [];
+  if (shop) extra.push(`Shop website: ${shop}`);
+  if (menu) extra.push(`Menu: ${menu}`);
+  return `${String(message || '').trim()}\n\n${extra.join('\n')}`;
+}
+
 export const formatOrderReadyMessage = ({
   items,
   totalAmount,

@@ -1,14 +1,8 @@
-import { Platform } from 'react-native';
+import { useMemo } from 'react';
+import { Platform, StyleSheet } from 'react-native';
+import useStore from '../store/store';
 
-export const UI = {
-  bg: '#f7f8fa',
-  surface: '#ffffff',
-  surfaceMuted: '#f3f4f6',
-  border: '#e5e7eb',
-  borderLight: '#f0f1f3',
-  textPrimary: '#111827',
-  textSecondary: '#6b7280',
-  textMuted: '#9ca3af',
+const SHARED = {
   success: '#059669',
   successBg: '#ecfdf5',
   danger: '#dc2626',
@@ -21,6 +15,69 @@ export const UI = {
   radiusFull: 999,
   space: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32 },
 };
+
+export const LIGHT_UI = {
+  mode: 'light',
+  bg: '#f7f8fa',
+  surface: '#ffffff',
+  surfaceMuted: '#f3f4f6',
+  border: '#e5e7eb',
+  borderLight: '#f0f1f3',
+  textPrimary: '#111827',
+  textSecondary: '#6b7280',
+  textMuted: '#9ca3af',
+  overlay: 'rgba(17, 24, 39, 0.45)',
+  menuSheet: '#ffffff',
+  ...SHARED,
+  successBg: '#ecfdf5',
+  dangerBg: '#fef2f2',
+};
+
+export const DARK_UI = {
+  mode: 'dark',
+  bg: '#0f172a',
+  surface: '#1e293b',
+  surfaceMuted: '#334155',
+  border: '#334155',
+  borderLight: '#1e293b',
+  textPrimary: '#f8fafc',
+  textSecondary: '#cbd5e1',
+  textMuted: '#94a3b8',
+  overlay: 'rgba(0, 0, 0, 0.65)',
+  menuSheet: '#1e293b',
+  ...SHARED,
+  successBg: 'rgba(5, 150, 105, 0.18)',
+  dangerBg: 'rgba(220, 38, 38, 0.18)',
+  info: '#7dd3fc',
+};
+
+export function normalizeAppearanceMode(value) {
+  return value === 'dark' ? 'dark' : 'light';
+}
+
+export function getUI(mode = 'light') {
+  return normalizeAppearanceMode(mode) === 'dark' ? DARK_UI : LIGHT_UI;
+}
+
+/** Live palette from store — use in components instead of static UI colors. */
+export function useUI() {
+  const appearanceMode = useStore((s) => s.appearanceMode);
+  return useMemo(() => getUI(appearanceMode), [appearanceMode]);
+}
+
+/** Rebuild StyleSheet when light/dark changes. */
+export function useThemedStyles(factory) {
+  const ui = useUI();
+  const styles = useMemo(() => StyleSheet.create(factory(ui)), [ui, factory]);
+  return useMemo(() => ({ ui, styles }), [ui, styles]);
+}
+
+/**
+ * Backward-compatible UI object.
+ * Prefer useUI() / useThemedStyles() for theme-aware screens.
+ * Static StyleSheet.create({ color: UI.bg }) will NOT update on toggle.
+ */
+export const UI = { ...LIGHT_UI };
 
 export function shadow(level = 'sm') {
   if (Platform.OS === 'web') {
@@ -66,36 +123,55 @@ export function shadow(level = 'sm') {
   return nativeShadows[level] || nativeShadows.sm;
 }
 
-export function cardStyle(extra = {}) {
+function resolvePaletteAndExtra(first, second) {
+  const looksLikeUi =
+    first &&
+    typeof first === 'object' &&
+    (first.mode === 'light' || first.mode === 'dark') &&
+    typeof first.bg === 'string';
+  if (looksLikeUi) {
+    return { palette: first, extra: second && typeof second === 'object' ? second : {} };
+  }
   return {
-    backgroundColor: UI.surface,
-    borderRadius: UI.radiusLg,
+    palette: LIGHT_UI,
+    extra: first && typeof first === 'object' ? first : {},
+  };
+}
+
+/** Pass either `cardStyle({ marginTop: 8 })` or `cardStyle(ui, { marginTop: 8 })`. */
+export function cardStyle(first = {}, second) {
+  const { palette, extra } = resolvePaletteAndExtra(first, second);
+  return {
+    backgroundColor: palette.surface,
+    borderRadius: palette.radiusLg,
     borderWidth: 1,
-    borderColor: UI.borderLight,
+    borderColor: palette.borderLight,
     ...extra,
   };
 }
 
-export function floatingBar(extra = {}) {
+export function floatingBar(first = {}, second) {
+  const { palette, extra } = resolvePaletteAndExtra(first, second);
   return {
-    backgroundColor: UI.surface,
-    borderRadius: UI.radiusXl,
+    backgroundColor: palette.surface,
+    borderRadius: palette.radiusXl,
     borderWidth: 1,
-    borderColor: UI.borderLight,
+    borderColor: palette.borderLight,
     ...shadow('md'),
     ...extra,
   };
 }
 
-export function inputStyle(extra = {}) {
+export function inputStyle(first = {}, second) {
+  const { palette, extra } = resolvePaletteAndExtra(first, second);
   return {
-    backgroundColor: UI.surface,
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: UI.border,
-    borderRadius: UI.radiusMd,
+    borderColor: palette.border,
+    borderRadius: palette.radiusMd,
     paddingHorizontal: 14,
     fontSize: 15,
-    color: UI.textPrimary,
+    color: palette.textPrimary,
     ...extra,
   };
 }
@@ -103,7 +179,7 @@ export function inputStyle(extra = {}) {
 export function primaryButton(color, extra = {}) {
   return {
     backgroundColor: color,
-    borderRadius: UI.radiusMd,
+    borderRadius: SHARED.radiusMd,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -112,11 +188,12 @@ export function primaryButton(color, extra = {}) {
   };
 }
 
-export function sectionTitle(extra = {}) {
+export function sectionTitle(first = {}, second) {
+  const { palette, extra } = resolvePaletteAndExtra(first, second);
   return {
     fontSize: 22,
     fontWeight: '700',
-    color: UI.textPrimary,
+    color: palette.textPrimary,
     letterSpacing: -0.3,
     ...extra,
   };
@@ -129,13 +206,14 @@ export function accentTopBorder(color) {
   };
 }
 
-export function pillButton(color, filled = false) {
+export function pillButton(color, filled = false, ui = LIGHT_UI) {
+  const palette = ui?.mode ? ui : LIGHT_UI;
   return {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: UI.radiusFull,
+    borderRadius: palette.radiusFull,
     borderWidth: 1,
-    borderColor: filled ? color : UI.border,
-    backgroundColor: filled ? `${color}14` : UI.surface,
+    borderColor: filled ? color : palette.border,
+    backgroundColor: filled ? `${color}14` : palette.surface,
   };
 }

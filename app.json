@@ -23,6 +23,12 @@
           "whatsapp",
           "sms"
         ],
+        "NSCameraUsageDescription": "Allow NAM bill to scan QR codes to join a master device on local Wi-Fi.",
+        "NSPhotoLibraryUsageDescription": "Allow NAM bill to access photos so you can upload your UPI QR code.",
+        "NSLocalNetworkUsageDescription": "NAM bill uses the local network to sync orders with other shop devices without internet.",
+        "NSBonjourServices": [
+          "_nambill-sync._tcp."
+        ],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -32,11 +38,19 @@
         "backgroundColor": "#F5F5F0"
       },
       "package": "com.riye.posbilling",
-      "versionCode": 4,
-      "softwareKeyboardLayoutMode": "resize",
+      "versionCode": 7,
+      "softwareKeyboardLayoutMode": "pan",
       "edgeToEdgeEnabled": true,
+      "usesCleartextTraffic": true,
       "permissions": [
-        "INTERNET"
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE",
+        "CHANGE_WIFI_STATE",
+        "CHANGE_NETWORK_STATE",
+        "CAMERA",
+        "android.permission.CAMERA",
+        "android.permission.NEARBY_WIFI_DEVICES"
       ]
     },
     "web": {
@@ -52,9 +66,25 @@
       "expo-font",
       "@react-native-community/datetimepicker",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow NAM bill to scan QR codes to join a master device on local Wi‑Fi.",
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow NAM bill to access photos so you can upload your UPI QR code."
+        }
+      ],
+      "./plugins/withGradleNetworkTimeout",
+      [
         "expo-build-properties",
         {
           "android": {
+            "newArchEnabled": false,
+            "usesCleartextTraffic": true,
             "manifestQueries": {
               "package": ["com.whatsapp", "com.whatsapp.w4b"],
               "intent": [
@@ -68,6 +98,9 @@
                 }
               ]
             }
+          },
+          "ios": {
+            "newArchEnabled": false
           }
         }
       ]

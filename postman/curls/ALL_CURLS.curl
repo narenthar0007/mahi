@@ -1,0 +1,361 @@
+# =============================================================================
+# NAM bill API — all curls (single + multiple)
+# Base URL: http://localhost:3000
+# Import Postman collection: ../NAM-bill-API.postman_collection.json
+#
+# Auth (from Settings → Generate):
+#   Body:   appUniqueKey  (finds the correct app; required)
+#   Header: X-App-Unique-Key, X-App-Key, X-Secret-Token, X-Client-Token
+#   Server checks tokens match the unique key (utils/apiKeys.js verifyApiRequestAuth)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1) ADD ITEM — Single
+# -----------------------------------------------------------------------------
+curl --location 'http://localhost:3000/api/items' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "name": "Masala Dosa",
+  "basePrice": 60,
+  "category": "Breakfast",
+  "variants": [
+    {
+      "name": "Plain",
+      "price": 50
+    },
+    {
+      "name": "Cheese",
+      "price": 80
+    }
+  ],
+  "addons": [
+    {
+      "name": "Extra Chutney",
+      "price": 10
+    }
+  ],
+  "enabled": true,
+  "isWeightBased": false,
+  "isVariablePrice": false,
+  "unit": ""
+}'
+
+# -----------------------------------------------------------------------------
+# 1) ADD ITEMS — Multiple
+# -----------------------------------------------------------------------------
+curl --location 'http://localhost:3000/api/items/bulk' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "items": [
+    {
+      "name": "Masala Dosa",
+      "basePrice": 60,
+      "category": "Breakfast",
+      "variants": [
+        {
+          "name": "Cheese",
+          "price": 80
+        }
+      ],
+      "addons": [
+        {
+          "name": "Extra Chutney",
+          "price": 10
+        }
+      ],
+      "enabled": true,
+      "isWeightBased": false,
+      "isVariablePrice": false,
+      "unit": ""
+    },
+    {
+      "name": "Tomato",
+      "basePrice": 40,
+      "category": "Vegetables",
+      "variants": [],
+      "addons": [],
+      "enabled": true,
+      "isWeightBased": true,
+      "isVariablePrice": false,
+      "unit": "Kg"
+    }
+  ]
+}'
+
+# -----------------------------------------------------------------------------
+# 2) REMOVE ITEM — Single
+# -----------------------------------------------------------------------------
+curl --location --request DELETE 'http://localhost:3000/api/items/a1b2c3d4-e5f6-7890-abcd-ef1234567890' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "appUniqueKey": "WSE6HS7J77"
+  }'
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Accept: application/json'
+
+# -----------------------------------------------------------------------------
+# 2) REMOVE ITEMS — Multiple
+# -----------------------------------------------------------------------------
+curl --location --request DELETE 'http://localhost:3000/api/items' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "ids": [
+    "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "f0e1d2c3-b4a5-6789-0abc-def123456789"
+  ]
+}'
+
+# -----------------------------------------------------------------------------
+# 3) EDIT ITEM — Single
+# -----------------------------------------------------------------------------
+curl --location --request PUT 'http://localhost:3000/api/items/a1b2c3d4-e5f6-7890-abcd-ef1234567890' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "name": "Masala Dosa Special",
+  "basePrice": 70,
+  "category": "Breakfast",
+  "variants": [
+    {
+      "name": "Plain",
+      "price": 60
+    },
+    {
+      "name": "Cheese",
+      "price": 90
+    }
+  ],
+  "addons": [
+    {
+      "name": "Extra Chutney",
+      "price": 15
+    }
+  ],
+  "enabled": true,
+  "isWeightBased": false,
+  "isVariablePrice": false,
+  "unit": ""
+}'
+
+# -----------------------------------------------------------------------------
+# 3) EDIT ITEMS — Multiple
+# -----------------------------------------------------------------------------
+curl --location --request PUT 'http://localhost:3000/api/items/bulk' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "items": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Masala Dosa Special",
+      "basePrice": 70,
+      "category": "Breakfast",
+      "enabled": true
+    },
+    {
+      "id": "f0e1d2c3-b4a5-6789-0abc-def123456789",
+      "name": "Tomato",
+      "basePrice": 45,
+      "unit": "Kg",
+      "isWeightBased": true
+    }
+  ]
+}'
+
+# -----------------------------------------------------------------------------
+# 4) MAKE ORDER — Single
+# -----------------------------------------------------------------------------
+curl --location 'http://localhost:3000/api/orders' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "customerPhone": "9876543210",
+  "taxEnabled": true,
+  "isPaid": true,
+  "offerApplied": false,
+  "items": [
+    {
+      "itemId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Masala Dosa",
+      "selectedVariant": {
+        "name": "Cheese",
+        "price": 80
+      },
+      "selectedAddons": [
+        {
+          "name": "Extra Chutney",
+          "price": 10
+        }
+      ],
+      "quantity": 2,
+      "unitPrice": 90,
+      "isWeightBased": false,
+      "isVariablePrice": false,
+      "unit": ""
+    }
+  ]
+}'
+
+# -----------------------------------------------------------------------------
+# 4) MAKE ORDERS — Multiple
+# -----------------------------------------------------------------------------
+curl --location 'http://localhost:3000/api/orders/bulk' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "orders": [
+    {
+      "customerPhone": "9876543210",
+      "taxEnabled": true,
+      "isPaid": true,
+      "offerApplied": false,
+      "items": [
+        {
+          "itemId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          "name": "Masala Dosa",
+          "selectedVariant": {
+            "name": "Cheese",
+            "price": 80
+          },
+          "selectedAddons": [],
+          "quantity": 1,
+          "unitPrice": 80
+        }
+      ]
+    },
+    {
+      "customerPhone": "9123456780",
+      "taxEnabled": false,
+      "isPaid": false,
+      "offerApplied": true,
+      "items": [
+        {
+          "itemId": "f0e1d2c3-b4a5-6789-0abc-def123456789",
+          "name": "Tomato",
+          "selectedVariant": null,
+          "selectedAddons": [],
+          "quantity": 1.5,
+          "unitPrice": 40,
+          "isWeightBased": true,
+          "unit": "Kg"
+        }
+      ]
+    }
+  ]
+}'
+
+# -----------------------------------------------------------------------------
+# 5) DELETE ORDER — Single
+# -----------------------------------------------------------------------------
+curl --location --request DELETE 'http://localhost:3000/api/orders/ORD-000042' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "appUniqueKey": "WSE6HS7J77"
+  }'
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Accept: application/json'
+
+# -----------------------------------------------------------------------------
+# 5) DELETE ORDERS — Multiple
+# -----------------------------------------------------------------------------
+curl --location --request DELETE 'http://localhost:3000/api/orders' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "ids": [
+    "order-uuid-1",
+    "ORD-000042",
+    "ORD-000043"
+  ]
+}'
+
+# -----------------------------------------------------------------------------
+# 6) ORDER STATUS CHANGE — Single
+# -----------------------------------------------------------------------------
+curl --location --request PATCH 'http://localhost:3000/api/orders/ORD-000042/status' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "isPaid": true,
+  "isOrderReady": true
+}'
+
+# -----------------------------------------------------------------------------
+# 6) ORDER STATUS CHANGE — Multiple
+# -----------------------------------------------------------------------------
+curl --location --request PATCH 'http://localhost:3000/api/orders/status' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "updates": [
+    {
+      "id": "order-uuid-1",
+      "isPaid": true,
+      "isOrderReady": true
+    },
+    {
+      "id": "ORD-000042",
+      "isPaid": false,
+      "isOrderReady": false
+    }
+  ]
+}'

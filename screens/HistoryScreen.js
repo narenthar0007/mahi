@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -23,10 +23,10 @@ import {
   normalizePhoneNumber,
   sendViaWhatsApp,
 } from '../utils/billShare';
-import { showAlert } from '../utils/alert';
+import { showAlert, confirmAction } from '../utils/alert';
 import { useAppTheme } from '../utils/theme';
 import { useTranslation } from '../utils/i18n';
-import { UI, cardStyle } from '../utils/uiTheme';
+import { cardStyle, useThemedStyles } from '../utils/uiTheme';
 import {
   filterOrdersByDateRange,
   getExportSummary,
@@ -34,6 +34,13 @@ import {
   startOfDay,
   endOfDay,
 } from '../utils/orderExport';
+import SalesStatsModal from '../components/SalesStatsModal';
+import EditOrderModal from '../components/EditOrderModal';
+import {
+  TABLE_COLORS,
+  getTableOrderHistoryStyle,
+  isRunningTableOrder,
+} from '../utils/tableManagement';
 
 const formatDateTime = (isoString) => {
   const date = new Date(isoString);
@@ -82,15 +89,22 @@ function getPresetRange(presetId) {
 }
 
 export default function HistoryScreen() {
+  const { ui, styles } = useThemedStyles(createStyles);
   const history = useStore((s) => s.history);
   const shopName = useStore((s) => s.shopName);
   const updateOrderCustomerPhone = useStore((s) => s.updateOrderCustomerPhone);
+  const updateOrderItems = useStore((s) => s.updateOrderItems);
   const toggleOrderPaid = useStore((s) => s.toggleOrderPaid);
+  const markOrderWrong = useStore((s) => s.markOrderWrong);
   const markOrderReady = useStore((s) => s.markOrderReady);
   const theme = useAppTheme();
   const { t, datePresets, language } = useTranslation();
   const tabBarHeight = useBottomTabBarHeight();
-  const listBottomPad = tabBarHeight + 24;
+  const listBottomPad = useMemo(() => tabBarHeight + 24, [tabBarHeight]);
+  const listContentStyle = useMemo(
+    () => [styles.list, { paddingBottom: listBottomPad }],
+    [styles.list, listBottomPad]
+  );
 
   const [fromDate, setFromDate] = useState(startOfDay(new Date()));
   const [toDate, setToDate] = useState(endOfDay(new Date()));
@@ -98,6 +112,9 @@ export default function HistoryScreen() {
   const [pickerMode, setPickerMode] = useState(null);
   const [editingOrderKey, setEditingOrderKey] = useState(null);
   const [editingPhone, setEditingPhone] = useState('');
+  const [statsVisible, setStatsVisible] = useState(false);
+  const [menuOrder, setMenuOrder] = useState(null);
+  const [editOrder, setEditOrder] = useState(null);
 
   const sortedHistory = useMemo(
     () => [...history].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
@@ -105,7 +122,10 @@ export default function HistoryScreen() {
   );
 
   const filteredForExport = useMemo(
-    () => filterOrdersByDateRange(sortedHistory, fromDate, toDate),
+    () =>
+      filterOrdersByDateRange(sortedHistory, fromDate, toDate).filter(
+        (order) => order && !order.isWrongOrder
+      ),
     [sortedHistory, fromDate, toDate]
   );
 
@@ -297,6 +317,15 @@ export default function HistoryScreen() {
         })}
       </Text>
 
+      <TouchableOpacity
+        style={[styles.statsBtn, { borderColor: theme.filterSortColor }]}
+        onPress={() => setStatsVisible(true)}
+      >
+        <Text style={[styles.statsBtnText, { color: theme.filterSortColor }]}>
+          {t('viewSalesStats')}
+        </Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={[styles.exportBtn, { backgroundColor: theme.headerColor }]} onPress={handleExport}>
         <Text style={styles.exportBtnText}>
           {t(Platform.OS === 'web' ? 'exportTableHtml' : 'exportTablePdf')}
@@ -331,6 +360,90 @@ export default function HistoryScreen() {
     sendViaWhatsApp(message, normalizePhoneNumber(order.customerPhone) || order.customerPhone);
   };
 
+  const handleMarkPaid = (order) => {
+    if (order.isPaid) {
+      showAlert(t('paidLockedTitle'), t('paidLockedMsg'));
+      return;
+    }
+    if (order.isWrongOrder) {
+      showAlert(t('wrongOrderLockedTitle'), t('wrongOrderLockedMsg'));
+      return;
+    }
+    const result = toggleOrderPaid(order.id);
+    if (result?.error === 'paid_locked') {
+      showAlert(t('paidLockedTitle'), t('paidLockedMsg'));
+    } else if (result?.error === 'wrong_locked') {
+      showAlert(t('wrongOrderLockedTitle'), t('wrongOrderLockedMsg'));
+    }
+  };
+
+  const handleWrongOrder = (order) => {
+    if (order.isPaid) {
+      showAlert(t('wrongOrderPaidTitle'), t('wrongOrderPaidMsg'));
+      return;
+    }
+
+    if (order.isWrongOrder) {
+      const result = markOrderWrong(order.id, false);
+      if (!result?.success) {
+        if (result?.error === 'paid_locked') {
+          showAlert(t('wrongOrderPaidTitle'), t('wrongOrderPaidMsg'));
+        }
+        return;
+      }
+      showAlert(t('wrongOrderUndoneTitle'), t('wrongOrderUndoneMsg'));
+      return;
+    }
+
+    confirmAction(
+      t('wrongOrderConfirmTitle'),
+      t('wrongOrderConfirmMsg'),
+      () => {
+        const result = markOrderWrong(order.id, true);
+        if (!result?.success) {
+          if (result?.error === 'paid_locked') {
+            showAlert(t('wrongOrderPaidTitle'), t('wrongOrderPaidMsg'));
+          } else {
+            showAlert(t('validation'), t('wrongOrderFailed'));
+          }
+        }
+      },
+      t('markWrongOrder')
+    );
+  };
+
+  const openOrderMenu = (order) => {
+    setMenuOrder(order);
+  };
+
+  const handleEditOrderFromMenu = () => {
+    const order = menuOrder;
+    setMenuOrder(null);
+    if (!order) return;
+    if (order.isPaid) {
+      showAlert(t('editOrderLockedTitle'), t('editOrderLockedMsg'));
+      return;
+    }
+    setEditOrder(order);
+  };
+
+  const handleSaveEditedOrder = (nextItems) => {
+    if (!editOrder) return;
+    const result = updateOrderItems(editOrder.id, nextItems);
+    if (!result?.success) {
+      if (result?.error === 'paid_locked') {
+        showAlert(t('editOrderLockedTitle'), t('editOrderLockedMsg'));
+      } else if (result?.error === 'empty_items') {
+        showAlert(t('validation'), t('editOrderNeedItem'));
+      } else {
+        showAlert(t('validation'), t('editOrderFailed'));
+      }
+      return;
+    }
+    setEditOrder(null);
+    showAlert(t('saved'), t('orderUpdated'));
+  };
+
   const beginPhoneEdit = (order) => {
     setEditingOrderKey(order.id);
     setEditingPhone(order.customerPhone || '');
@@ -355,33 +468,91 @@ export default function HistoryScreen() {
   };
 
   const getOrderCardStyle = (order) => {
-    if (order.isPaid) {
-      return { backgroundColor: 'rgba(40, 167, 69, 0.14)', borderColor: 'rgba(40, 167, 69, 0.35)' };
+    if (order.isWrongOrder) {
+      return {
+        backgroundColor: 'rgba(220, 38, 38, 0.10)',
+        borderColor: 'rgba(220, 38, 38, 0.35)',
+      };
     }
+    if (order.isPaid) {
+      return {
+        backgroundColor: TABLE_COLORS.paid.backgroundColor,
+        borderColor: TABLE_COLORS.paid.borderColor,
+      };
+    }
+    const tableStyle = getTableOrderHistoryStyle(order);
+    if (tableStyle) return tableStyle;
     if (order.isOrderReady) {
-      return { backgroundColor: 'rgba(13, 110, 253, 0.12)', borderColor: 'rgba(13, 110, 253, 0.3)' };
+      return {
+        backgroundColor: TABLE_COLORS.orderReady.backgroundColor,
+        borderColor: TABLE_COLORS.orderReady.borderColor,
+      };
     }
     return null;
   };
 
-  const renderOrder = ({ item }) => {
+  const renderOrder = useCallback(({ item }) => {
     const orderHighlight = getOrderCardStyle(item);
 
     return (
       <View style={[styles.card, orderHighlight]}>
         <View style={styles.cardHeader}>
-          <Text style={styles.date}>{formatDateTime(item.timestamp)}</Text>
+          <View style={styles.cardHeaderLeft}>
+            <Text style={styles.date}>{formatDateTime(item.timestamp)}</Text>
+            {item.isTableOrder ? (
+              <View
+                style={[
+                  styles.tableBadge,
+                  isRunningTableOrder(item) ? styles.tableBadgeRunning : styles.tableBadgeDone,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tableBadgeText,
+                    isRunningTableOrder(item)
+                      ? styles.tableBadgeTextRunning
+                      : styles.tableBadgeTextDone,
+                  ]}
+                >
+                  {t('tableOrderBadge', { number: item.tableNumber || '—' })}
+                </Text>
+              </View>
+            ) : null}
+            {item.isEdited ? (
+              <View style={styles.editedBadge}>
+                <Text style={styles.editedBadgeText}>{t('orderEditedBadge')}</Text>
+              </View>
+            ) : null}
+            {item.isWrongOrder ? (
+              <View style={styles.wrongBadge}>
+                <Text style={styles.wrongBadgeText}>{t('wrongOrderBadge')}</Text>
+              </View>
+            ) : null}
+          </View>
           <View style={styles.totalBox}>
-            <Text style={[styles.amount, { color: theme.buttonColor }]}>
-              {formatCurrency(item.totalAmount)}
-            </Text>
+            <View style={styles.amountRow}>
+              <Text style={[styles.amount, { color: theme.buttonColor }]}>
+                {formatCurrency(item.totalAmount)}
+              </Text>
+              <TouchableOpacity
+                style={styles.menuBtn}
+                onPress={() => openOrderMenu(item)}
+                hitSlop={8}
+                accessibilityLabel={t('orderMenu')}
+              >
+                <Text style={styles.menuBtnText}>⋮</Text>
+              </TouchableOpacity>
+            </View>
             <View style={styles.statusBtnRow}>
               <TouchableOpacity
                 style={[
                   styles.paidBtn,
                   item.isPaid && styles.paidBtnActive,
+                  item.isPaid && styles.paidBtnLocked,
+                  item.isWrongOrder && styles.paidBtnLocked,
                 ]}
-                onPress={() => toggleOrderPaid(item.id)}
+                onPress={() => handleMarkPaid(item)}
+                disabled={item.isPaid || item.isWrongOrder}
               >
                 <Text style={[styles.paidBtnText, item.isPaid && styles.paidBtnTextActive]}>
                   {item.isPaid ? t('paidCheck') : t('markPaid')}
@@ -394,6 +565,24 @@ export default function HistoryScreen() {
                 <Text style={styles.orderReadyInlineTitle}>{t('orderReady')}</Text>
               </TouchableOpacity>
             </View>
+            {!item.isPaid ? (
+              <TouchableOpacity
+                style={[
+                  styles.wrongBtn,
+                  item.isWrongOrder && styles.wrongBtnActive,
+                ]}
+                onPress={() => handleWrongOrder(item)}
+              >
+                <Text
+                  style={[
+                    styles.wrongBtnText,
+                    item.isWrongOrder && styles.wrongBtnTextActive,
+                  ]}
+                >
+                  {item.isWrongOrder ? t('undoWrongOrder') : t('markWrongOrder')}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
         {item.taxEnabled ? (
@@ -406,6 +595,7 @@ export default function HistoryScreen() {
         ) : null}
         <Text style={styles.orderId} numberOfLines={1}>
           {t('orderIdLabel')} {item.orderId || item.id}
+          {item.isEdited ? ` · ${t('orderEditedShort')}` : ''}
         </Text>
         <View style={styles.phoneRow}>
           <Text style={styles.itemCount}>
@@ -473,14 +663,25 @@ export default function HistoryScreen() {
           orderId={item.orderId || item.id}
           title="Order Receipt"
           customerPhone={item.customerPhone || ''}
+          isTableOrder={item.isTableOrder}
+          tableNumber={item.tableNumber}
+          isPaid={item.isPaid}
           compact
         />
       </View>
     );
-  };
+  }, [
+    styles,
+    theme.buttonColor,
+    t,
+    editingOrderKey,
+    editingPhone,
+    shopName,
+    language,
+  ]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={[]}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -497,29 +698,72 @@ export default function HistoryScreen() {
               <Text style={styles.emptySub}>{t('noOrdersYetSub')}</Text>
             </View>
           }
-          contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
+          contentContainerStyle={listContentStyle}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         />
+        <SalesStatsModal
+          visible={statsVisible}
+          onClose={() => setStatsVisible(false)}
+          orders={sortedHistory}
+          shopName={shopName}
+        />
+        <EditOrderModal
+          visible={Boolean(editOrder)}
+          order={editOrder}
+          onClose={() => setEditOrder(null)}
+          onSave={handleSaveEditedOrder}
+        />
+        {menuOrder ? (
+          <View style={styles.menuOverlay}>
+            <TouchableOpacity
+              style={styles.menuBackdrop}
+              activeOpacity={1}
+              onPress={() => setMenuOrder(null)}
+            />
+            <View style={styles.menuSheet}>
+              <Text style={styles.menuTitle}>
+                {t('orderIdLabel')} {menuOrder.orderId || menuOrder.id}
+              </Text>
+              <TouchableOpacity
+                style={[styles.menuItem, menuOrder.isPaid && styles.menuItemDisabled]}
+                onPress={handleEditOrderFromMenu}
+              >
+                <Text
+                  style={[styles.menuItemText, menuOrder.isPaid && styles.menuItemTextDisabled]}
+                >
+                  {t('editOrderItems')}
+                </Text>
+                {menuOrder.isPaid ? (
+                  <Text style={styles.menuItemHint}>{t('editOrderLockedShort')}</Text>
+                ) : null}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuCancel} onPress={() => setMenuOrder(null)}>
+                <Text style={styles.menuCancelText}>{t('cancel')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: UI.bg },
+function createStyles(ui) {
+  return {
+  safe: { flex: 1, backgroundColor: ui.bg },
   flex: { flex: 1 },
   list: { padding: 20, paddingBottom: 0 },
   exportPanel: {
-    ...cardStyle(),
+    ...cardStyle(ui),
     padding: 20,
     marginBottom: 16,
   },
   exportTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: UI.textPrimary,
+    color: ui.textPrimary,
     letterSpacing: -0.3,
     marginBottom: 14,
   },
@@ -531,8 +775,8 @@ const styles = StyleSheet.create({
   presetBtn: {
     flex: 1,
     paddingVertical: 9,
-    borderRadius: UI.radiusFull,
-    backgroundColor: UI.surfaceMuted,
+    borderRadius: ui.radiusFull,
+    backgroundColor: ui.surfaceMuted,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'transparent',
@@ -558,11 +802,11 @@ const styles = StyleSheet.create({
   },
   dateBox: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: ui.surfaceMuted,
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: ui.borderLight,
   },
   dateLabel: {
     fontSize: 11,
@@ -573,12 +817,12 @@ const styles = StyleSheet.create({
   dateValue: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1a1a2e',
+    color: ui.textPrimary,
   },
   webDateInput: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1a1a2e',
+    color: ui.textPrimary,
     padding: 0,
     marginTop: 2,
   },
@@ -599,8 +843,20 @@ const styles = StyleSheet.create({
     color: '#868e96',
     marginBottom: 12,
   },
+  statsBtn: {
+    backgroundColor: ui.surface,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1.5,
+  },
+  statsBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
   exportBtn: {
-    backgroundColor: '#1a1a2e',
+    backgroundColor: ui.textPrimary,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
@@ -617,7 +873,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#dee2e6',
+    borderColor: ui.border,
   },
   exportCsvText: {
     color: '#495057',
@@ -625,7 +881,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   card: {
-    ...cardStyle(),
+    ...cardStyle(ui),
     padding: 18,
     marginBottom: 12,
   },
@@ -634,17 +890,94 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
+  cardHeaderLeft: {
+    flex: 1,
+    paddingRight: 8,
+    gap: 6,
+  },
   date: {
     fontSize: 14,
     fontWeight: '600',
     color: '#495057',
-    flex: 1,
-    paddingRight: 8,
+  },
+  editedBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(253, 126, 20, 0.16)',
+    borderColor: 'rgba(253, 126, 20, 0.45)',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  editedBadgeText: {
+    color: '#e8590c',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  wrongBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(220, 38, 38, 0.14)',
+    borderColor: 'rgba(220, 38, 38, 0.4)',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  wrongBadgeText: {
+    color: '#dc2626',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tableBadge: {
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  tableBadgeRunning: {
+    backgroundColor: 'rgba(244, 114, 182, 0.28)',
+    borderColor: 'rgba(236, 72, 153, 0.5)',
+  },
+  tableBadgeDone: {
+    backgroundColor: 'rgba(244, 114, 182, 0.14)',
+    borderColor: 'rgba(236, 72, 153, 0.3)',
+  },
+  tableBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tableBadgeTextRunning: {
+    color: '#9d174d',
+  },
+  tableBadgeTextDone: {
+    color: '#be185d',
   },
   amount: {
     fontSize: 20,
     fontWeight: '800',
     color: '#e94560',
+  },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  menuBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#f1f3f5',
+    borderWidth: 1,
+    borderColor: ui.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuBtnText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#495057',
+    marginTop: -4,
   },
   totalBox: {
     alignItems: 'flex-end',
@@ -661,11 +994,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#dee2e6',
+    borderColor: ui.border,
   },
   paidBtnActive: {
     backgroundColor: 'rgba(40, 167, 69, 0.2)',
     borderColor: 'rgba(40, 167, 69, 0.5)',
+  },
+  paidBtnLocked: {
+    opacity: 0.95,
   },
   paidBtnText: {
     color: '#495057',
@@ -674,6 +1010,84 @@ const styles = StyleSheet.create({
   },
   paidBtnTextActive: {
     color: '#2b8a3e',
+  },
+  wrongBtn: {
+    backgroundColor: '#fef2f2',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.35)',
+    alignSelf: 'flex-end',
+  },
+  wrongBtnActive: {
+    backgroundColor: 'rgba(220, 38, 38, 0.16)',
+    borderColor: 'rgba(220, 38, 38, 0.5)',
+  },
+  wrongBtnText: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  wrongBtnTextActive: {
+    color: '#b91c1c',
+  },
+  menuOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    zIndex: 20,
+  },
+  menuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(17,24,39,0.35)',
+  },
+  menuSheet: {
+    backgroundColor: ui.surface,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+    paddingBottom: 28,
+  },
+  menuTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#868e96',
+    marginBottom: 12,
+  },
+  menuItem: {
+    backgroundColor: ui.surfaceMuted,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: ui.borderLight,
+    marginBottom: 10,
+  },
+  menuItemDisabled: {
+    opacity: 0.7,
+  },
+  menuItemText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: ui.textPrimary,
+  },
+  menuItemTextDisabled: {
+    color: '#868e96',
+  },
+  menuItemHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#868e96',
+    fontWeight: '600',
+  },
+  menuCancel: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  menuCancelText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#495057',
   },
   taxNote: {
     fontSize: 12,
@@ -714,22 +1128,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   phoneEditBox: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: ui.surfaceMuted,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: ui.borderLight,
     borderRadius: 10,
     padding: 12,
     marginBottom: 10,
   },
   phoneInput: {
-    backgroundColor: '#fff',
+    backgroundColor: ui.surface,
     borderWidth: 1,
-    borderColor: '#dee2e6',
+    borderColor: ui.border,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#1a1a2e',
+    color: ui.textPrimary,
   },
   phoneEditActions: {
     flexDirection: 'row',
@@ -740,7 +1154,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f1f3f5',
     borderWidth: 1,
-    borderColor: '#dee2e6',
+    borderColor: ui.border,
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center',
@@ -784,7 +1198,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1a1a2e',
+    color: ui.textPrimary,
   },
   emptySub: {
     fontSize: 14,
@@ -793,4 +1207,5 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 20,
   },
-});
+};
+}

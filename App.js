@@ -1,14 +1,35 @@
 import 'react-native-gesture-handler';
+import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './navigation/AppNavigator';
 import ErrorBoundary from './components/ErrorBoundary';
+import useStore from './store/store';
+import deviceSync from './utils/deviceSync';
+
+try {
+  deviceSync.setStoreAccessor(useStore);
+} catch (error) {
+  console.error('Device sync init failed:', error);
+}
 
 export default function App() {
+  const appearanceMode = useStore((s) => s.appearanceMode);
+
+  useEffect(() => {
+    return () => {
+      try {
+        deviceSync.stop();
+      } catch {
+        // ignore shutdown errors
+      }
+    };
+  }, []);
+
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <StatusBar style="light" />
+        <StatusBar style={appearanceMode === 'dark' ? 'light' : 'dark'} />
         <AppNavigator />
       </ErrorBoundary>
     </SafeAreaProvider>

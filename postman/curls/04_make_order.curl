@@ -1,0 +1,87 @@
+# Make Order — Single
+curl --location 'http://localhost:3000/api/orders' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "customerPhone": "9876543210",
+  "taxEnabled": true,
+  "isPaid": true,
+  "offerApplied": false,
+  "items": [
+    {
+      "itemId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Masala Dosa",
+      "selectedVariant": {
+        "name": "Cheese",
+        "price": 80
+      },
+      "selectedAddons": [
+        {
+          "name": "Extra Chutney",
+          "price": 10
+        }
+      ],
+      "quantity": 2,
+      "unitPrice": 90,
+      "isWeightBased": false,
+      "isVariablePrice": false,
+      "unit": ""
+    }
+  ]
+}'
+
+# Make Orders — Multiple
+curl --location 'http://localhost:3000/api/orders/bulk' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "orders": [
+    {
+      "customerPhone": "9876543210",
+      "taxEnabled": true,
+      "isPaid": true,
+      "offerApplied": false,
+      "items": [
+        {
+          "itemId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          "name": "Masala Dosa",
+          "selectedVariant": {
+            "name": "Cheese",
+            "price": 80
+          },
+          "selectedAddons": [],
+          "quantity": 1,
+          "unitPrice": 80
+        }
+      ]
+    },
+    {
+      "customerPhone": "9123456780",
+      "taxEnabled": false,
+      "isPaid": false,
+      "offerApplied": true,
+      "items": [
+        {
+          "itemId": "f0e1d2c3-b4a5-6789-0abc-def123456789",
+          "name": "Tomato",
+          "selectedVariant": null,
+          "selectedAddons": [],
+          "quantity": 1.5,
+          "unitPrice": 40,
+          "isWeightBased": true,
+          "unit": "Kg"
+        }
+      ]
+    }
+  ]
+}'

@@ -1,0 +1,80 @@
+# Add Item — Single
+curl --location 'http://localhost:3000/api/items' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "name": "Masala Dosa",
+  "basePrice": 60,
+  "category": "Breakfast",
+  "variants": [
+    {
+      "name": "Plain",
+      "price": 50
+    },
+    {
+      "name": "Cheese",
+      "price": 80
+    }
+  ],
+  "addons": [
+    {
+      "name": "Extra Chutney",
+      "price": 10
+    }
+  ],
+  "enabled": true,
+  "isWeightBased": false,
+  "isVariablePrice": false,
+  "unit": ""
+}'
+
+# Add Items — Multiple
+curl --location 'http://localhost:3000/api/items/bulk' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "items": [
+    {
+      "name": "Masala Dosa",
+      "basePrice": 60,
+      "category": "Breakfast",
+      "variants": [
+        {
+          "name": "Cheese",
+          "price": 80
+        }
+      ],
+      "addons": [
+        {
+          "name": "Extra Chutney",
+          "price": 10
+        }
+      ],
+      "enabled": true,
+      "isWeightBased": false,
+      "isVariablePrice": false,
+      "unit": ""
+    },
+    {
+      "name": "Tomato",
+      "basePrice": 40,
+      "category": "Vegetables",
+      "variants": [],
+      "addons": [],
+      "enabled": true,
+      "isWeightBased": true,
+      "isVariablePrice": false,
+      "unit": "Kg"
+    }
+  ]
+}'

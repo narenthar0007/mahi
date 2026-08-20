@@ -21,6 +21,7 @@ export default class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      const details = this.state.error?.message || String(this.state.error || '');
       return (
         <View style={styles.container}>
           <Text style={styles.title}>Something went wrong</Text>
@@ -28,6 +29,7 @@ export default class ErrorBoundary extends React.Component {
             The app hit an error. Try reloading. If it keeps happening, clear app data in Expo Go
             and log in again.
           </Text>
+          {details ? <Text style={styles.details}>{details}</Text> : null}
           <TouchableOpacity style={styles.btn} onPress={this.handleRetry}>
             <Text style={styles.btnText}>Try Again</Text>
           </TouchableOpacity>
@@ -58,7 +60,15 @@ const styles = StyleSheet.create({
     color: '#adb5bd',
     textAlign: 'center',
     lineHeight: 22,
+    marginBottom: 12,
+  },
+  details: {
+    fontSize: 12,
+    color: '#f8a5b3',
+    textAlign: 'center',
+    lineHeight: 18,
     marginBottom: 24,
+    paddingHorizontal: 12,
   },
   btn: {
     backgroundColor: '#e94560',

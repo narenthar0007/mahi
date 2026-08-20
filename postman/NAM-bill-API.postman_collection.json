@@ -1,0 +1,552 @@
+{
+  "info": {
+    "_postman_id": "a8c4e2f1-9b3d-4c7a-8e1f-2d5b6a0c9f34",
+    "name": "NAM bill API",
+    "description": "API collection for NAM bill POS — items and orders.\n\nAuth:\n- Body: appUniqueKey (required — finds the correct app)\n- Headers: X-App-Unique-Key, X-App-Key, X-Secret-Token, X-Client-Token\n- Server must verify tokens match the unique key (see utils/apiKeys.js verifyApiRequestAuth)\n\nBase URL default: http://localhost:3000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "itemId",
+      "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    },
+    {
+      "key": "orderId",
+      "value": "ORD-000042"
+    },
+    {
+      "key": "orderKey",
+      "value": "order-uuid-here"
+    },
+    {
+      "key": "apiUniqueKey",
+      "value": "WSE6HS7J77"
+    },
+    {
+      "key": "apiAppKey",
+      "value": "0C0C40GS0SCO8K4WWOCC"
+    },
+    {
+      "key": "apiSecretToken",
+      "value": "4SWK8COK4KKO44SOGOSG0W408"
+    },
+    {
+      "key": "apiClientToken",
+      "value": "4060064006"
+    }
+  ],
+  "item": [
+    {
+      "name": "Items",
+      "item": [
+        {
+          "name": "Add Item",
+          "item": [
+            {
+              "name": "Add Item (Single)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\",\n  \"name\": \"Masala Dosa\",\n  \"basePrice\": 60,\n  \"category\": \"Breakfast\",\n  \"variants\": [\n    {\n      \"name\": \"Plain\",\n      \"price\": 50\n    },\n    {\n      \"name\": \"Cheese\",\n      \"price\": 80\n    }\n  ],\n  \"addons\": [\n    {\n      \"name\": \"Extra Chutney\",\n      \"price\": 10\n    }\n  ],\n  \"enabled\": true,\n  \"isWeightBased\": false,\n  \"isVariablePrice\": false,\n  \"unit\": \"\"\n}"
+                },
+                "url": "{{baseUrl}}/api/items",
+                "description": "Create one inventory item. Maps to addInventoryItem()."
+              },
+              "response": []
+            },
+            {
+              "name": "Add Items (Multiple)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\",\n  \"items\": [\n    {\n      \"name\": \"Masala Dosa\",\n      \"basePrice\": 60,\n      \"category\": \"Breakfast\",\n      \"variants\": [\n        {\n          \"name\": \"Cheese\",\n          \"price\": 80\n        }\n      ],\n      \"addons\": [\n        {\n          \"name\": \"Extra Chutney\",\n          \"price\": 10\n        }\n      ],\n      \"enabled\": true,\n      \"isWeightBased\": false,\n      \"isVariablePrice\": false,\n      \"unit\": \"\"\n    },\n    {\n      \"name\": \"Tomato\",\n      \"basePrice\": 40,\n      \"category\": \"Vegetables\",\n      \"variants\": [],\n      \"addons\": [],\n      \"enabled\": true,\n      \"isWeightBased\": true,\n      \"isVariablePrice\": false,\n      \"unit\": \"Kg\"\n    }\n  ]\n}"
+                },
+                "url": "{{baseUrl}}/api/items/bulk",
+                "description": "Create multiple inventory items. Maps to bulkAddInventoryItems()."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Remove Item",
+          "item": [
+            {
+              "name": "Remove Item (Single)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/items/{{itemId}}",
+                "description": "Delete one inventory item by id. Maps to removeInventoryItem(id).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Remove Items (Multiple)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\",\n  \"ids\": [\n    \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"f0e1d2c3-b4a5-6789-0abc-def123456789\"\n  ]\n}"
+                },
+                "url": "{{baseUrl}}/api/items",
+                "description": "Delete multiple inventory items by ids."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Edit Item",
+          "item": [
+            {
+              "name": "Edit Item (Single)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\",\n  \"name\": \"Masala Dosa Special\",\n  \"basePrice\": 70,\n  \"category\": \"Breakfast\",\n  \"variants\": [\n    {\n      \"name\": \"Plain\",\n      \"price\": 60\n    },\n    {\n      \"name\": \"Cheese\",\n      \"price\": 90\n    }\n  ],\n  \"addons\": [\n    {\n      \"name\": \"Extra Chutney\",\n      \"price\": 15\n    }\n  ],\n  \"enabled\": true,\n  \"isWeightBased\": false,\n  \"isVariablePrice\": false,\n  \"unit\": \"\"\n}"
+                },
+                "url": "{{baseUrl}}/api/items/{{itemId}}",
+                "description": "Update one inventory item. Maps to updateInventoryItem(id, updates)."
+              },
+              "response": []
+            },
+            {
+              "name": "Edit Items (Multiple)",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\",\n  \"items\": [\n    {\n      \"id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n      \"name\": \"Masala Dosa Special\",\n      \"basePrice\": 70,\n      \"category\": \"Breakfast\",\n      \"enabled\": true\n    },\n    {\n      \"id\": \"f0e1d2c3-b4a5-6789-0abc-def123456789\",\n      \"name\": \"Tomato\",\n      \"basePrice\": 45,\n      \"unit\": \"Kg\",\n      \"isWeightBased\": true\n    }\n  ]\n}"
+                },
+                "url": "{{baseUrl}}/api/items/bulk",
+                "description": "Update multiple inventory items in one request."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Make Order",
+          "item": [
+            {
+              "name": "Make Order (Single)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\",\n  \"customerPhone\": \"9876543210\",\n  \"taxEnabled\": true,\n  \"isPaid\": true,\n  \"offerApplied\": false,\n  \"items\": [\n    {\n      \"itemId\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n      \"name\": \"Masala Dosa\",\n      \"selectedVariant\": {\n        \"name\": \"Cheese\",\n        \"price\": 80\n      },\n      \"selectedAddons\": [\n        {\n          \"name\": \"Extra Chutney\",\n          \"price\": 10\n        }\n      ],\n      \"quantity\": 2,\n      \"unitPrice\": 90,\n      \"isWeightBased\": false,\n      \"isVariablePrice\": false,\n      \"unit\": \"\"\n    }\n  ]\n}"
+                },
+                "url": "{{baseUrl}}/api/orders",
+                "description": "Create one order. Maps to checkout() with explicit line items."
+              },
+              "response": []
+            },
+            {
+              "name": "Make Orders (Multiple)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\",\n  \"orders\": [\n    {\n      \"customerPhone\": \"9876543210\",\n      \"taxEnabled\": true,\n      \"isPaid\": true,\n      \"offerApplied\": false,\n      \"items\": [\n        {\n          \"itemId\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n          \"name\": \"Masala Dosa\",\n          \"selectedVariant\": {\n            \"name\": \"Cheese\",\n            \"price\": 80\n          },\n          \"selectedAddons\": [],\n          \"quantity\": 1,\n          \"unitPrice\": 80\n        }\n      ]\n    },\n    {\n      \"customerPhone\": \"9123456780\",\n      \"taxEnabled\": false,\n      \"isPaid\": false,\n      \"offerApplied\": true,\n      \"items\": [\n        {\n          \"itemId\": \"f0e1d2c3-b4a5-6789-0abc-def123456789\",\n          \"name\": \"Tomato\",\n          \"selectedVariant\": null,\n          \"selectedAddons\": [],\n          \"quantity\": 1.5,\n          \"unitPrice\": 40,\n          \"isWeightBased\": true,\n          \"unit\": \"Kg\"\n        }\n      ]\n    }\n  ]\n}"
+                },
+                "url": "{{baseUrl}}/api/orders/bulk",
+                "description": "Create multiple orders in one request."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Delete Order",
+          "item": [
+            {
+              "name": "Delete Order (Single)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": "{{baseUrl}}/api/orders/{{orderKey}}",
+                "description": "Delete one order by id or orderId (e.g. ORD-000042).",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\"\n}"
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Orders (Multiple)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\",\n  \"ids\": [\n    \"order-uuid-1\",\n    \"ORD-000042\",\n    \"ORD-000043\"\n  ]\n}"
+                },
+                "url": "{{baseUrl}}/api/orders",
+                "description": "Delete multiple orders by id / orderId."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Order Status Change",
+          "item": [
+            {
+              "name": "Order Status Change (Single)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\",\n  \"isPaid\": true,\n  \"isOrderReady\": true\n}"
+                },
+                "url": "{{baseUrl}}/api/orders/{{orderKey}}/status",
+                "description": "Update paid/ready flags for one order. Maps to toggleOrderPaid / markOrderReady."
+              },
+              "response": []
+            },
+            {
+              "name": "Order Status Change (Multiple)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "X-App-Unique-Key",
+                    "value": "{{apiUniqueKey}}"
+                  },
+                  {
+                    "key": "X-App-Key",
+                    "value": "{{apiAppKey}}"
+                  },
+                  {
+                    "key": "X-Secret-Token",
+                    "value": "{{apiSecretToken}}"
+                  },
+                  {
+                    "key": "X-Client-Token",
+                    "value": "{{apiClientToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Accept",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"appUniqueKey\": \"{{apiUniqueKey}}\",\n  \"updates\": [\n    {\n      \"id\": \"order-uuid-1\",\n      \"isPaid\": true,\n      \"isOrderReady\": true\n    },\n    {\n      \"id\": \"ORD-000042\",\n      \"isPaid\": false,\n      \"isOrderReady\": false\n    }\n  ]\n}"
+                },
+                "url": "{{baseUrl}}/api/orders/status",
+                "description": "Update status flags for multiple orders."
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

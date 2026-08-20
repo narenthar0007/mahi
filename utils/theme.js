@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import useStore from '../store/store';
 
 export const GST_RATE = 0.05;
@@ -88,7 +89,14 @@ export function resolveTheme(themeState) {
 
 export function useAppTheme() {
   const themeState = useStore((s) => s.theme);
-  return resolveTheme(themeState);
+  return useMemo(() => resolveTheme(themeState), [
+    themeState?.presetId,
+    themeState?.buttonColor,
+    themeState?.textColor,
+    themeState?.tabBarColor,
+    themeState?.filterSortColor,
+    themeState?.headerColor,
+  ]);
 }
 
 export function calculateTaxBreakdown(subtotal, taxEnabled) {

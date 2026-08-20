@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Modal,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -28,7 +29,8 @@ import {
   normalizePhoneNumber,
   sanitizeCustomerPhoneInput,
 } from '../utils/billShare';
-import { shareWhatsAppInvoiceText } from '../utils/invoiceExport';
+import { shareUpiQrOnWhatsApp, shareWhatsAppInvoiceText } from '../utils/invoiceExport';
+import { normalizeUpiQrUri } from '../utils/upiQr';
 import { useAppTheme } from '../utils/theme';
 import {
   calculateBillTotals,
@@ -37,12 +39,14 @@ import {
   isShopOfferConfigured,
 } from '../utils/offers';
 import { useTranslation } from '../utils/i18n';
-import { UI, floatingBar, shadow } from '../utils/uiTheme';
+import { floatingBar, shadow, useThemedStyles } from '../utils/uiTheme';
 import { useResponsiveLayout } from '../utils/responsive';
+import { TABLE_COLORS } from '../utils/tableManagement';
 
-const BOTTOM_BAR_HEIGHT = 72;
+const BOTTOM_BAR_HEIGHT = 64;
 
 export default function BillingScreen() {
+  const { ui, styles } = useThemedStyles(createStyles);
   const { t, sortOptions, language } = useTranslation();
   const inventory = useStore((s) => s.inventory);
   const cart = useStore((s) => s.cart);
@@ -51,18 +55,36 @@ export default function BillingScreen() {
   const updateCartItemQuantity = useStore((s) => s.updateCartItemQuantity);
   const checkout = useStore((s) => s.checkout);
   const getCartTotal = useStore((s) => s.getCartTotal);
+  const tables = useStore((s) => s.tables);
+  const activeTableId = useStore((s) => s.activeTableId);
+  const clearActiveTable = useStore((s) => s.clearActiveTable);
   const shopName = useStore((s) => s.shopName);
   const fssaiNumber = useStore((s) => s.fssaiNumber);
   const gstinNumber = useStore((s) => s.gstinNumber);
+  const shopWebsite = useStore((s) => s.shopWebsite);
+  const menuWebsite = useStore((s) => s.menuWebsite);
+  const includeWebsitesInWhatsApp = useStore((s) => s.includeWebsitesInWhatsApp);
+  const upiQrUri = useStore((s) => s.upiQrUri);
   const showWhatsAppInvoiceButtons = useStore((s) => s.showWhatsAppInvoiceButtons);
   const shopOffer = useStore((s) => s.shopOffer);
   const menuListView = useStore((s) => s.menuListView);
   const setMenuListView = useStore((s) => s.setMenuListView);
   const theme = useAppTheme();
   const tabBarHeight = useBottomTabBarHeight();
+  const stickyTabBarHeightRef = useRef(tabBarHeight);
+  if (tabBarHeight > stickyTabBarHeightRef.current) {
+    stickyTabBarHeightRef.current = tabBarHeight;
+  }
+  const stableTabBarHeight = Math.max(
+    tabBarHeight,
+    stickyTabBarHeightRef.current
+  );
   const { menuColumns, isNarrow, scaledSize, horizontalPad } = useResponsiveLayout();
-  const listBottomPad = tabBarHeight + BOTTOM_BAR_HEIGHT + 16;
-  const bottomBarStyle = { bottom: tabBarHeight + 8 };
+  const listBottomPad = stableTabBarHeight + BOTTOM_BAR_HEIGHT + 16;
+  const bottomBarStyle = useMemo(
+    () => ({ bottom: stableTabBarHeight + 8 }),
+    [stableTabBarHeight]
+  );
 
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -77,15 +99,24 @@ export default function BillingScreen() {
   const [billVisible, setBillVisible] = useState(false);
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [billPaid, setBillPaid] = useState(false);
-
-  // Safety: ensure no global modal blocks other tabs (web/desktop).
-  useEffect(() => {
-    if (!billVisible) return undefined;
-    return () => setBillVisible(false);
-  }, [billVisible]);
+  const [upiCheckout, setUpiCheckout] = useState(null);
+  const [sharingUpiQr, setSharingUpiQr] = useState(false);
 
   const activeInventory = useMemo(
-    () => inventory.filter((item) => item.enabled !== false),
+    () =>
+      (Array.isArray(inventory) ? inventory : [])
+        .filter((item) => item != null)
+        .map((item) => ({
+          ...item,
+          basePrice: item.basePrice ?? 0,
+          variants: Array.isArray(item.variants) ? item.variants : [],
+          addons: Array.isArray(item.addons) ? item.addons : [],
+          enabled: item.enabled !== false,
+          isWeightBased: Boolean(item.isWeightBased),
+          isVariablePrice: Boolean(item.isVariablePrice),
+          unit: item.unit || '',
+        }))
+        .filter((item) => item.enabled !== false),
     [inventory]
   );
 
@@ -120,19 +151,76 @@ export default function BillingScreen() {
     () => cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),
     [cart]
   );
+  const activeTable = useMemo(
+    () => tables.find((entry) => entry.id === activeTableId) || null,
+    [tables, activeTableId]
+  );
+
+  // Waitlist / seated guest phone → order page automatically.
+  useEffect(() => {
+    if (!activeTableId || !activeTable) return;
+    const phone = String(activeTable.guestPhone || '').trim();
+    if (!phone) return;
+    setCustomerPhone(sanitizeCustomerPhoneInput(phone));
+  }, [activeTableId, activeTable?.guestPhone]);
 
   const handleMenuItemPress = (item) => {
-    const needsModal = item.variants.length > 0 || item.addons.length > 0;
+    const needsModal =
+      (item.variants?.length ?? 0) > 0 ||
+      (item.addons?.length ?? 0) > 0 ||
+      Boolean(item.isWeightBased) ||
+      Boolean(item.isVariablePrice);
     if (needsModal) {
       setSelectedItem(item);
       setModalVisible(true);
     } else {
-      addToCart(item, null, []);
+      addToCart(item, null, [], 1);
     }
   };
 
-  const handleAddToCart = (item, selectedVariant, selectedAddons) => {
-    addToCart(item, selectedVariant, selectedAddons);
+  const handleAddToCart = (item, selectedVariant, selectedAddons, quantity = 1, options = {}) => {
+    addToCart(item, selectedVariant, selectedAddons, quantity, options);
+  };
+
+  const getMenuItemHighlight = (item) => {
+    if (item.isWeightBased && item.isVariablePrice) {
+      return {
+        backgroundColor: 'rgba(255, 213, 79, 0.28)',
+        borderColor: 'rgba(30, 136, 229, 0.55)',
+      };
+    }
+    if (item.isWeightBased) {
+      return {
+        backgroundColor: 'rgba(255, 213, 79, 0.32)',
+        borderColor: 'rgba(245, 180, 0, 0.5)',
+      };
+    }
+    if (item.isVariablePrice) {
+      return {
+        backgroundColor: 'rgba(66, 165, 245, 0.28)',
+        borderColor: 'rgba(30, 136, 229, 0.5)',
+      };
+    }
+    return null;
+  };
+
+  const formatQuantityLabel = (cartItem) => {
+    const qty = Number(cartItem.quantity);
+    const qtyText = Number.isInteger(qty) ? String(qty) : String(Math.round(qty * 100) / 100);
+    if (cartItem.isWeightBased && cartItem.unit) {
+      return `${qtyText} ${cartItem.unit}`;
+    }
+    return qtyText;
+  };
+
+  const adjustCartQuantity = (cartItem, delta) => {
+    const current = Number(cartItem.quantity) || 0;
+    const nextQty = Math.round((current + delta) * 100) / 100;
+    if (nextQty <= 0 || (!cartItem.isWeightBased && nextQty < 1)) {
+      removeFromCart(cartItem.id);
+      return;
+    }
+    updateCartItemQuantity(cartItem.id, nextQty);
   };
 
   const completeCheckout = async (offerApplied = false) => {
@@ -140,15 +228,35 @@ export default function BillingScreen() {
     const phone = sanitizeCustomerPhoneInput(customerPhone);
     const whatsAppPhone = normalizePhoneNumber(phone);
     try {
-      const order = checkout(phone, { taxEnabled, isPaid: billPaid, offerApplied });
-      if (!order) return;
+      const order = checkout(phone, {
+        taxEnabled,
+        isPaid: billPaid,
+        offerApplied,
+        tableId: activeTableId || null,
+      });
+      if (!order) {
+        showAlert(t('checkoutFailed'), t('checkoutFailedMsg'));
+        return;
+      }
 
+      const checkoutPhone = phone;
       setCustomerPhone('');
       setTaxEnabled(false);
       setBillPaid(false);
       setCheckoutOfferApplied(false);
+      clearActiveTable();
 
-      if (phone && showWhatsAppInvoiceButtons !== false) {
+      const savedUpiQr = normalizeUpiQrUri(upiQrUri);
+      if (savedUpiQr) {
+        setUpiCheckout({
+          uri: savedUpiQr,
+          total: order.totalAmount || 0,
+          phone: whatsAppPhone || checkoutPhone || '',
+          orderId: order.orderId || order.id || '',
+        });
+      }
+
+      if (checkoutPhone && showWhatsAppInvoiceButtons !== false) {
         setSuccessMessage(t('openingWhatsApp'));
         try {
           await shareWhatsAppInvoiceText({
@@ -167,19 +275,36 @@ export default function BillingScreen() {
             shopName,
             fssaiNumber,
             gstinNumber,
-            customerPhone: whatsAppPhone || phone,
+            shopWebsite,
+            menuWebsite,
+            includeWebsitesInWhatsApp,
+            upiQrUri: savedUpiQr,
+            customerPhone: whatsAppPhone || checkoutPhone,
             title: 'Tax Invoice',
+            isTableOrder: order.isTableOrder,
+            tableNumber: order.tableNumber,
+            isPaid: order.isPaid,
           });
-          setSuccessMessage(t('whatsAppOpenedBill'));
+          setSuccessMessage(
+            order.isTableOrder
+              ? t('tableOrderSavedWhatsApp', { number: order.tableNumber || '' })
+              : t('whatsAppOpenedBill')
+          );
         } catch (shareError) {
           console.error('WhatsApp share failed:', shareError);
           showAlert(t('orderSaved'), t('orderSavedShareFailed'));
           setSuccessMessage('');
         }
       } else {
-        setSuccessMessage(t('orderSavedFromHistory'));
+        setSuccessMessage(
+          order.isTableOrder
+            ? t('tableOrderSaved', { number: order.tableNumber || '' })
+            : t('orderSavedFromHistory')
+        );
       }
 
+      // Intentionally no UI state transition here; success message is cleared by the
+      // timeout below. Keep the timer local to this checkout operation.
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (error) {
       console.error('Checkout failed:', error);
@@ -243,71 +368,124 @@ export default function BillingScreen() {
     return parts.join(' · ');
   };
 
-  const renderMenuItem = ({ item }) => {
+  const formatItemMetaLine = (item) => {
+    const parts = [];
+    if (item.itemNumber) {
+      parts.push(`${t('menuId')} ${item.itemNumber}`);
+    }
+    if (item.variants?.length > 0) {
+      parts.push(t('variantsBadge', { count: item.variants.length }));
+    }
+    if (item.addons?.length > 0) {
+      parts.push(t('addonsBadge', { count: item.addons.length }));
+    }
+    return parts.join(' · ');
+  };
+
+  const renderMenuItem = useCallback(({ item }) => {
+    const highlight = getMenuItemHighlight(item);
+    const priceLabel = item.isVariablePrice
+      ? t('variablePriceShort')
+      : `${formatCurrency(item.basePrice ?? 0)}${item.isWeightBased && item.unit ? `/${item.unit}` : ''}`;
+
+    const badges = (
+      <>
+        {item.isWeightBased ? (
+          <View style={[styles.menuListBadge, { backgroundColor: 'rgba(245, 180, 0, 0.22)' }]}>
+            <Text style={[styles.menuListBadgeText, { color: '#b8860b' }]}>w</Text>
+          </View>
+        ) : null}
+        {item.isVariablePrice ? (
+          <View style={[styles.menuListBadge, { backgroundColor: 'rgba(30, 136, 229, 0.18)' }]}>
+            <Text style={[styles.menuListBadgeText, { color: '#1565c0' }]}>₹</Text>
+          </View>
+        ) : null}
+        {(item.variants?.length ?? 0) > 0 ? (
+          <View style={[styles.menuListBadge, { backgroundColor: `${theme.buttonColor}18` }]}>
+            <Text style={[styles.menuListBadgeText, { color: theme.buttonColor }]}>v</Text>
+          </View>
+        ) : null}
+        {(item.addons?.length ?? 0) > 0 ? (
+          <View style={[styles.menuListBadge, { backgroundColor: `${theme.filterSortColor}18` }]}>
+            <Text style={[styles.menuListBadgeText, { color: theme.filterSortColor }]}>a</Text>
+          </View>
+        ) : null}
+      </>
+    );
+
     if (menuListView) {
       return (
         <Pressable
-          style={({ pressed }) => [styles.menuListRow, pressed && styles.menuListRowPressed]}
+          style={({ pressed }) => [
+            styles.menuRowItem,
+            highlight && styles.menuRowItemHighlight,
+            pressed && styles.menuRowItemPressed,
+          ]}
           onPress={() => handleMenuItemPress(item)}
         >
-          <Text style={styles.menuListId}>
-            {t('menuId')} {item.itemNumber}
-          </Text>
-          <Text style={[styles.menuListName, { color: theme.textColor }]} numberOfLines={1}>
-            {item.name}
-          </Text>
-          {(item.variants.length > 0 || item.addons.length > 0) && (
-            <View style={styles.menuListBadges}>
-              {item.variants.length > 0 ? (
-                <View style={[styles.menuListBadge, { backgroundColor: `${theme.buttonColor}18` }]}>
-                  <Text style={[styles.menuListBadgeText, { color: theme.buttonColor }]}>v</Text>
-                </View>
-              ) : null}
-              {item.addons.length > 0 ? (
-                <View style={[styles.menuListBadge, { backgroundColor: `${theme.filterSortColor}18` }]}>
-                  <Text style={[styles.menuListBadgeText, { color: theme.filterSortColor }]}>a</Text>
-                </View>
-              ) : null}
+          <View style={styles.menuRowMain}>
+            <View style={styles.menuRowTitleLine}>
+              <Text style={[styles.menuRowName, { color: theme.textColor }]} numberOfLines={1}>
+                {item.name}
+              </Text>
+              <View style={styles.badgeGroup}>{badges}</View>
             </View>
-          )}
-          <Text style={[styles.menuListPrice, { color: theme.buttonColor }]}>
-            {formatCurrency(item.basePrice)}
-          </Text>
+            <Text style={styles.menuRowMeta} numberOfLines={1}>
+              {formatItemMetaLine(item)}
+            </Text>
+          </View>
+          <Text style={[styles.menuRowPrice, { color: theme.buttonColor }]}>{priceLabel}</Text>
         </Pressable>
       );
     }
 
     return (
       <Pressable
-        style={({ pressed }) => [styles.menuCard, pressed && styles.menuCardPressed]}
+        style={({ pressed }) => [
+          styles.menuCard,
+          highlight && styles.menuCardHighlight,
+          pressed && styles.menuCardPressed,
+        ]}
         onPress={() => handleMenuItemPress(item)}
       >
-        <Text style={styles.menuId}>
-          {t('menuId')} {item.itemNumber}
-        </Text>
-        <Text style={[styles.menuName, { color: theme.textColor }]} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <Text style={[styles.menuPrice, { color: theme.buttonColor }]}>
-          {formatCurrency(item.basePrice)}
-        </Text>
-        {(item.variants.length > 0 || item.addons.length > 0) && (
-          <Text style={styles.menuMeta} numberOfLines={1}>
-            {item.variants.length > 0 ? t('variantsBadge', { count: item.variants.length }) : ''}
-            {item.variants.length > 0 && item.addons.length > 0 ? ' · ' : ''}
-            {item.addons.length > 0 ? t('addonsBadge', { count: item.addons.length }) : ''}
+        {highlight ? (
+          <View style={styles.inCartPill} />
+        ) : null}
+
+        <View style={styles.menuCardHeader}>
+          <Text style={[styles.menuCardName, { color: theme.textColor }]} numberOfLines={2}>
+            {item.name}
           </Text>
-        )}
+          <View style={styles.badgeGroup}>{badges}</View>
+        </View>
+
+        <Text style={styles.menuCardMeta} numberOfLines={2}>
+          {formatItemMetaLine(item)}
+        </Text>
+
+        <View style={styles.menuCardFooter}>
+          <Text style={[styles.menuPrice, { color: theme.buttonColor }]}>
+            {priceLabel}
+          </Text>
+        </View>
       </Pressable>
     );
-  };
+  }, [menuListView, theme.buttonColor, theme.filterSortColor, theme.textColor, t, styles]);
 
   const renderCartItem = (item) => (
-    <View key={item.id} style={styles.cartRow}>
+    <View
+      key={item.id}
+      style={[
+        styles.cartRow,
+        item.isWeightBased && styles.cartRowWeight,
+        item.isVariablePrice && !item.isWeightBased && styles.cartRowVariable,
+      ]}
+    >
       <View style={styles.cartInfo}>
         <Text style={[styles.cartName, { color: theme.textColor }]}>{formatCartLine(item)}</Text>
         <Text style={styles.cartUnit}>
-          {formatCurrency(item.unitPrice)} × {item.quantity}
+          {formatCurrency(item.unitPrice)}
+          {item.isWeightBased && item.unit ? `/${item.unit}` : ''} × {formatQuantityLabel(item)}
         </Text>
       </View>
       <View style={styles.cartRight}>
@@ -317,18 +495,16 @@ export default function BillingScreen() {
         <View style={styles.qtyRow}>
           <TouchableOpacity
             style={[styles.qtyBtn, { borderColor: `${theme.buttonColor}40` }]}
-            onPress={() => {
-              const nextQty = (Number(item.quantity) || 1) - 1;
-              if (nextQty <= 0) removeFromCart(item.id);
-              else updateCartItemQuantity(item.id, nextQty);
-            }}
+            onPress={() => adjustCartQuantity(item, item.isWeightBased ? -0.25 : -1)}
           >
             <Text style={[styles.qtyBtnText, { color: theme.buttonColor }]}>−</Text>
           </TouchableOpacity>
-          <Text style={[styles.qtyValue, { color: theme.textColor }]}>{item.quantity}</Text>
+          <Text style={[styles.qtyValue, { color: theme.textColor }]}>
+            {formatQuantityLabel(item)}
+          </Text>
           <TouchableOpacity
             style={[styles.qtyBtn, { borderColor: `${theme.buttonColor}40` }]}
-            onPress={() => updateCartItemQuantity(item.id, (Number(item.quantity) || 0) + 1)}
+            onPress={() => adjustCartQuantity(item, item.isWeightBased ? 0.25 : 1)}
           >
             <Text style={[styles.qtyBtnText, { color: theme.buttonColor }]}>+</Text>
           </TouchableOpacity>
@@ -341,7 +517,7 @@ export default function BillingScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={[]}>
       <View style={styles.container}>
         <View style={[styles.menuSection, { paddingHorizontal: horizontalPad, paddingBottom: listBottomPad }]}>
           <View style={styles.menuHeaderRow}>
@@ -349,71 +525,114 @@ export default function BillingScreen() {
               <Text
                 style={[
                   styles.sectionLabel,
-                  { color: theme.textColor, fontSize: scaledSize(isNarrow ? 20 : 24) },
+                  { color: theme.textColor, fontSize: scaledSize(isNarrow ? 20 : 22) },
                 ]}
               >
                 {t('menu')}
               </Text>
               {activeInventory.length > 0 ? (
                 <Text style={styles.itemCountText}>
-                  {filteredInventory.length} / {activeInventory.length}
+                  {filteredInventory.length}/{activeInventory.length}
                 </Text>
               ) : null}
             </View>
             {activeInventory.length > 0 ? (
               <TouchableOpacity
-                style={styles.listViewToggle}
+                style={[
+                  styles.listViewToggle,
+                  menuListView && { backgroundColor: `${theme.buttonColor}14` },
+                ]}
                 onPress={() => setMenuListView(!menuListView)}
                 activeOpacity={0.75}
                 hitSlop={6}
               >
                 <Ionicons
-                  name={menuListView ? 'checkbox' : 'square-outline'}
-                  size={20}
-                  color={menuListView ? theme.buttonColor : UI.textMuted}
+                  name={menuListView ? 'list' : 'grid-outline'}
+                  size={16}
+                  color={menuListView ? theme.buttonColor : ui.textMuted}
                 />
-                <Text style={[styles.listViewToggleLabel, { color: theme.textColor }]}>
+                <Text
+                  style={[
+                    styles.listViewToggleLabel,
+                    { color: menuListView ? theme.buttonColor : ui.textSecondary },
+                  ]}
+                >
                   {t('menuListView')}
                 </Text>
               </TouchableOpacity>
             ) : null}
           </View>
 
+          {activeTable ? (
+            <View
+              style={[
+                styles.tableBanner,
+                {
+                  backgroundColor: TABLE_COLORS.occupied.backgroundColor,
+                  borderColor: TABLE_COLORS.occupied.borderColor,
+                },
+              ]}
+            >
+              <View style={styles.tableBannerTextWrap}>
+                <Text style={styles.tableBannerTitle}>
+                  {t('orderingForTable', { number: activeTable.number })}
+                </Text>
+                {activeTable.guestName || activeTable.guestPhone ? (
+                  <Text style={styles.tableBannerSub}>
+                    {[activeTable.guestName, activeTable.guestPhone].filter(Boolean).join(' · ')}
+                  </Text>
+                ) : (
+                  <Text style={styles.tableBannerSub}>{t('tableOrderBannerHint')}</Text>
+                )}
+              </View>
+              <TouchableOpacity onPress={clearActiveTable} hitSlop={8}>
+                <Text style={styles.tableBannerClear}>{t('clearTable')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {activeInventory.length > 0 && (
             <>
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder={t('searchPlaceholder')}
-                placeholderTextColor={UI.textMuted}
-                autoCorrect={false}
-                clearButtonMode="while-editing"
-              />
+              <View style={styles.searchWrap}>
+                <Ionicons name="search-outline" size={18} color={ui.textMuted} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder={t('searchPlaceholder')}
+                  placeholderTextColor={ui.textMuted}
+                  autoCorrect={false}
+                  clearButtonMode="while-editing"
+                />
+              </View>
               <View style={styles.sortRow}>
                 <Text style={styles.sortLabel}>{t('sortLabel')}</Text>
-                {sortOptions.map((option) => (
-                  <TouchableOpacity
-                    key={option.key}
-                    style={[
-                      styles.sortChip,
-                      sortBy === option.key && {
-                        backgroundColor: theme.filterSortColor,
-                        borderColor: theme.filterSortColor,
-                      },
-                    ]}
-                    onPress={() => setSortBy(option.key)}
-                  >
-                    <Text
-                      style={[
-                        styles.sortChipText,
-                        sortBy === option.key && styles.sortChipTextActive,
+                {sortOptions.map((option) => {
+                  const active = sortBy === option.key;
+                  return (
+                    <Pressable
+                      key={option.key}
+                      style={({ pressed }) => [
+                        styles.sortChip,
+                        active && {
+                          backgroundColor: theme.filterSortColor,
+                          borderColor: theme.filterSortColor,
+                        },
+                        pressed && styles.sortChipPressed,
                       ]}
+                      onPress={() => setSortBy(option.key)}
                     >
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Text
+                        style={[
+                          styles.sortChipText,
+                          active && styles.sortChipTextActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             </>
           )}
@@ -435,6 +654,8 @@ export default function BillingScreen() {
             </View>
           ) : (
             <FlatList
+              // React Native requires a remount when numColumns changes. Keep this key
+              // so switching between grid and list does not leave a stale layout.
               key={`menu-${menuListView ? 'list' : 'grid'}-${menuColumns}`}
               data={filteredInventory}
               keyExtractor={(item) => item.id}
@@ -449,7 +670,7 @@ export default function BillingScreen() {
         </View>
       </View>
 
-      <View style={[styles.bottomBar, floatingBar(), bottomBarStyle]}>
+      <View style={[styles.bottomBar, floatingBar(ui), bottomBarStyle]}>
         <TouchableOpacity
           style={[
             styles.cartIconBtn,
@@ -458,8 +679,9 @@ export default function BillingScreen() {
           ]}
           onPress={() => setBillVisible(true)}
           disabled={cart.length === 0}
+          activeOpacity={0.8}
         >
-          <Ionicons name="cart" size={22} color="#fff" />
+          <Ionicons name="cart" size={20} color="#fff" />
           {cartItemCount > 0 ? (
             <View style={[styles.cartBadge, { backgroundColor: theme.buttonColor }]}>
               <Text style={styles.cartBadgeText}>{cartItemCount}</Text>
@@ -490,7 +712,8 @@ export default function BillingScreen() {
       <Modal visible={billVisible} transparent animationType="slide" onRequestClose={() => setBillVisible(false)}>
         <KeyboardAvoidingView
           style={styles.billKeyboardRoot}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          enabled={Platform.OS === 'ios'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
         >
           <View style={styles.billOverlay}>
@@ -571,60 +794,60 @@ export default function BillingScreen() {
               ) : null}
 
               <View style={styles.billFooter}>
-              <View style={styles.billTotals}>
-                {taxEnabled ? (
-                  <>
-                    <Text style={styles.billTaxLine}>
-                      {t('subtotalLabel')} {formatCurrency(taxBreakdown.subtotal)}
-                    </Text>
-                    <Text style={styles.billTaxLine}>
-                      {t('cgstLabel')} {formatCurrency(taxBreakdown.cgstAmount)}
-                    </Text>
-                    <Text style={styles.billTaxLine}>
-                      {t('sgstLabel')} {formatCurrency(taxBreakdown.sgstAmount)}
-                    </Text>
-                  </>
-                ) : null}
-                <Text style={styles.billLabel}>{taxEnabled ? t('grandTotal') : t('total')}</Text>
-                <Text style={[styles.billAmount, { color: theme.textColor }]}>
-                  {formatCurrency(taxBreakdown.total)}
-                </Text>
-              </View>
-              <View style={styles.billActionRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.paidBtn,
-                    billPaid && styles.paidBtnActive,
-                    cart.length === 0 && styles.paidBtnDisabled,
-                  ]}
-                  onPress={() => setBillPaid((prev) => !prev)}
-                  disabled={cart.length === 0}
-                >
-                  <Text style={[styles.paidBtnText, billPaid && styles.paidBtnTextActive]}>
-                    {billPaid ? t('paidCheck') : t('markPaid')}
+                <View style={styles.billTotals}>
+                  {taxEnabled ? (
+                    <>
+                      <Text style={styles.billTaxLine}>
+                        {t('subtotalLabel')} {formatCurrency(taxBreakdown.subtotal)}
+                      </Text>
+                      <Text style={styles.billTaxLine}>
+                        {t('cgstLabel')} {formatCurrency(taxBreakdown.cgstAmount)}
+                      </Text>
+                      <Text style={styles.billTaxLine}>
+                        {t('sgstLabel')} {formatCurrency(taxBreakdown.sgstAmount)}
+                      </Text>
+                    </>
+                  ) : null}
+                  <Text style={styles.billLabel}>{taxEnabled ? t('grandTotal') : t('total')}</Text>
+                  <Text style={[styles.billAmount, { color: theme.textColor }]}>
+                    {formatCurrency(taxBreakdown.total)}
                   </Text>
-                </TouchableOpacity>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.checkoutBtn,
-                    { backgroundColor: theme.buttonColor },
-                    (cart.length === 0 || isCheckingOut) && styles.checkoutDisabled,
-                    pressed && cart.length > 0 && !isCheckingOut && styles.checkoutPressed,
-                  ]}
-                  onPress={() => {
-                    setBillVisible(false);
-                    handleCheckout();
-                  }}
-                  disabled={cart.length === 0 || isCheckingOut}
-                >
-                  <Text style={styles.checkoutText}>
-                    {isCheckingOut ? t('processing') : t('checkout')}
-                  </Text>
-                </Pressable>
+                </View>
+                <View style={styles.billActionRow}>
+                  <TouchableOpacity
+                    style={[
+                      styles.paidBtn,
+                      billPaid && styles.paidBtnActive,
+                      cart.length === 0 && styles.paidBtnDisabled,
+                    ]}
+                    onPress={() => setBillPaid((prev) => !prev)}
+                    disabled={cart.length === 0}
+                  >
+                    <Text style={[styles.paidBtnText, billPaid && styles.paidBtnTextActive]}>
+                      {billPaid ? t('paidCheck') : t('markPaid')}
+                    </Text>
+                  </TouchableOpacity>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.checkoutBtn,
+                      { backgroundColor: theme.buttonColor },
+                      (cart.length === 0 || isCheckingOut) && styles.checkoutDisabled,
+                      pressed && cart.length > 0 && !isCheckingOut && styles.checkoutPressed,
+                    ]}
+                    onPress={() => {
+                      setBillVisible(false);
+                      handleCheckout();
+                    }}
+                    disabled={cart.length === 0 || isCheckingOut}
+                  >
+                    <Text style={styles.checkoutText}>
+                      {isCheckingOut ? t('processing') : t('checkout')}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
             </View>
           </View>
-        </View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -672,12 +895,71 @@ export default function BillingScreen() {
         }}
         onAddToCart={handleAddToCart}
       />
+
+      <Modal
+        visible={Boolean(upiCheckout?.uri)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setUpiCheckout(null)}
+      >
+        <View style={styles.upiOverlay}>
+          <View style={[styles.upiCard, { backgroundColor: ui.surface }]}>
+            <Text style={[styles.upiTitle, { color: ui.textPrimary }]}>
+              {t('upiQrCheckoutTitle')}
+            </Text>
+            <Text style={[styles.upiHint, { color: ui.textSecondary }]}>
+              {t('upiQrCheckoutHint', {
+                total: formatCurrency(upiCheckout?.total || 0),
+              })}
+            </Text>
+            {upiCheckout?.uri ? (
+              <Image
+                source={{ uri: upiCheckout.uri }}
+                style={styles.upiImage}
+                resizeMode="contain"
+              />
+            ) : null}
+            {upiCheckout?.phone ? (
+              <TouchableOpacity
+                style={[styles.upiShareBtn, { backgroundColor: theme.buttonColor }]}
+                disabled={sharingUpiQr}
+                onPress={async () => {
+                  setSharingUpiQr(true);
+                  try {
+                    await shareUpiQrOnWhatsApp({
+                      upiQrUri: upiCheckout.uri,
+                      caption: `${shopName || 'Bill'} — Pay via UPI. Total: ${formatCurrency(
+                        upiCheckout.total || 0
+                      )}${upiCheckout.orderId ? `\nOrder: ${upiCheckout.orderId}` : ''}`,
+                      customerPhone: upiCheckout.phone,
+                      dialogTitle: t('upiQrShareWhatsApp'),
+                    });
+                  } catch (error) {
+                    console.error('Share UPI QR failed:', error);
+                    showAlert(t('validation'), t('upiQrPickFailed'));
+                  } finally {
+                    setSharingUpiQr(false);
+                  }
+                }}
+              >
+                <Text style={styles.upiShareBtnText}>{t('upiQrShareWhatsApp')}</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity style={styles.upiDoneBtn} onPress={() => setUpiCheckout(null)}>
+              <Text style={[styles.upiDoneBtnText, { color: theme.buttonColor }]}>
+                {t('upiQrDone')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: UI.bg },
+function createStyles(ui) {
+  return {
+  safe: { flex: 1, backgroundColor: ui.bg },
   container: { flex: 1, minHeight: 0 },
   menuSection: {
     flex: 1,
@@ -688,8 +970,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
-    gap: 12,
+    marginBottom: 12,
+    gap: 10,
+  },
+  tableBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    borderWidth: 1.5,
+    borderRadius: ui.radiusMd,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  tableBannerTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  tableBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#92400e',
+  },
+  tableBannerSub: {
+    fontSize: 12,
+    color: '#b45309',
+    fontWeight: '500',
+  },
+  tableBannerClear: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#9d174d',
   },
   menuHeaderLeft: {
     flex: 1,
@@ -701,46 +1013,50 @@ const styles = StyleSheet.create({
   listViewToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     flexShrink: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: ui.radiusFull,
+    backgroundColor: ui.surfaceMuted,
   },
   listViewToggleLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
   },
   itemCountText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: UI.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    color: ui.textMuted,
   },
   bottomBar: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: 14,
+    right: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   cartIconBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: UI.radiusMd,
+    width: 44,
+    height: 44,
+    borderRadius: ui.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cartIconBtnDisabled: {
-    opacity: 0.55,
+    opacity: 0.5,
   },
   cartBadge: {
     position: 'absolute',
-    top: -6,
-    right: -6,
-    minWidth: 22,
-    height: 22,
-    paddingHorizontal: 6,
-    borderRadius: 11,
+    top: -5,
+    right: -5,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
     backgroundColor: '#e94560',
     alignItems: 'center',
     justifyContent: 'center',
@@ -749,23 +1065,25 @@ const styles = StyleSheet.create({
   },
   cartBadgeText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
   billSummary: {
     flex: 1,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
   },
   billSummaryLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: UI.textMuted,
+    color: ui.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   billSummaryValue: {
-    marginTop: 2,
-    fontSize: 20,
+    marginTop: 1,
+    fontSize: 18,
     fontWeight: '700',
-    color: UI.textPrimary,
+    color: ui.textPrimary,
     letterSpacing: -0.3,
   },
   billKeyboardRoot: {
@@ -780,9 +1098,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(17,24,39,0.45)',
   },
   billSheet: {
-    backgroundColor: UI.surface,
-    borderTopLeftRadius: UI.radiusXl,
-    borderTopRightRadius: UI.radiusXl,
+    backgroundColor: ui.surface,
+    borderTopLeftRadius: ui.radiusXl,
+    borderTopRightRadius: ui.radiusXl,
     height: '88%',
     maxHeight: '88%',
     flexDirection: 'column',
@@ -802,7 +1120,7 @@ const styles = StyleSheet.create({
   billHandle: {
     width: 36,
     height: 4,
-    backgroundColor: UI.border,
+    backgroundColor: ui.border,
     borderRadius: 2,
     alignSelf: 'center',
     marginBottom: 16,
@@ -844,8 +1162,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#dee2e6',
-    backgroundColor: '#f8f9fa',
+    borderColor: ui.border,
+    backgroundColor: ui.surfaceMuted,
   },
   taxBtnText: {
     fontSize: 13,
@@ -857,41 +1175,56 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   sectionLabel: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
-    color: UI.textPrimary,
+    color: ui.textPrimary,
     letterSpacing: -0.4,
   },
-  searchInput: {
-    backgroundColor: UI.surface,
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: ui.surfaceMuted,
     borderWidth: 1,
-    borderColor: UI.border,
-    borderRadius: UI.radiusMd,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: UI.textPrimary,
-    marginBottom: 14,
+    borderColor: ui.borderLight,
+    borderRadius: ui.radiusMd,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  searchIcon: {
+    marginRight: 6,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: ui.textPrimary,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
   },
   sortRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 10,
+    gap: 6,
+    marginBottom: 12,
   },
   sortLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#868e96',
+    color: ui.textMuted,
+    marginRight: 2,
   },
   sortChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: UI.radiusFull,
-    backgroundColor: UI.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: ui.radiusFull,
+    backgroundColor: ui.surface,
     borderWidth: 1,
-    borderColor: UI.border,
+    borderColor: ui.border,
+  },
+  sortChipPressed: {
+    opacity: 0.85,
   },
   sortChipActive: {
     backgroundColor: '#e94560',
@@ -900,81 +1233,186 @@ const styles = StyleSheet.create({
   sortChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#495057',
+    color: ui.textSecondary,
   },
   sortChipTextActive: {
     color: '#fff',
   },
   menuList: { paddingBottom: 8 },
-  menuRow: { gap: 10 },
+  menuRow: { gap: 8 },
   menuCard: {
     flex: 1,
-    backgroundColor: UI.surface,
-    borderRadius: UI.radiusLg,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: ui.surface,
+    borderRadius: ui.radiusMd,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: UI.borderLight,
+    borderColor: ui.borderLight,
     minWidth: '45%',
     maxWidth: '100%',
   },
+  menuCardHighlight: {
+    borderColor: `${ui.info}55`,
+    backgroundColor: ui.mode === 'dark' ? 'rgba(125, 211, 252, 0.08)' : 'rgba(37, 99, 235, 0.04)',
+  },
   menuCardPressed: {
-    opacity: 0.88,
-    backgroundColor: UI.surfaceMuted,
+    opacity: 0.92,
+    backgroundColor: ui.surfaceMuted,
+  },
+  menuCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  menuCardName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  menuCardMeta: {
+    fontSize: 11,
+    color: ui.textMuted,
+    marginTop: 6,
+    lineHeight: 15,
+  },
+  menuCardFooter: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inCartPill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    borderTopLeftRadius: ui.radiusMd,
+    borderTopRightRadius: ui.radiusMd,
+    backgroundColor: ui.info,
+  },
+  badgeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  menuRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: ui.surface,
+    borderRadius: ui.radiusMd,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: ui.borderLight,
+  },
+  menuRowItemHighlight: {
+    borderColor: `${ui.info}55`,
+    backgroundColor: ui.mode === 'dark' ? 'rgba(125, 211, 252, 0.08)' : 'rgba(37, 99, 235, 0.04)',
+  },
+  menuRowItemPressed: {
+    opacity: 0.92,
+    backgroundColor: ui.surfaceMuted,
+  },
+  menuRowMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  menuRowTitleLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  menuRowName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  menuRowMeta: {
+    fontSize: 11,
+    color: ui.textMuted,
+  },
+  menuRowPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    flexShrink: 0,
+  },
+  menuCardMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  menuCardInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  menuCardBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
   },
   menuId: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: UI.textMuted,
-    marginBottom: 6,
+    fontSize: 10,
+    fontWeight: '700',
+    color: ui.textMuted,
+    marginBottom: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
   menuName: {
     fontSize: 15,
     fontWeight: '600',
-    lineHeight: 21,
+    lineHeight: 20,
   },
   menuPrice: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
-    marginTop: 8,
     letterSpacing: -0.2,
+    flexShrink: 0,
   },
   menuMeta: {
     fontSize: 11,
-    color: UI.textMuted,
+    color: ui.textMuted,
     marginTop: 6,
   },
   menuListRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: UI.surface,
-    borderRadius: UI.radiusMd,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginBottom: 8,
+    backgroundColor: ui.surface,
+    borderRadius: ui.radiusMd,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    marginBottom: 6,
     borderWidth: 1,
-    borderColor: UI.borderLight,
+    borderColor: ui.borderLight,
   },
   menuListRowPressed: {
-    opacity: 0.88,
-    backgroundColor: UI.surfaceMuted,
+    opacity: 0.92,
+    backgroundColor: ui.surfaceMuted,
   },
   menuListId: {
     fontSize: 11,
     fontWeight: '700',
-    color: UI.textMuted,
-    minWidth: 44,
+    color: ui.textMuted,
+    minWidth: 40,
   },
   menuListName: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   menuListPrice: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   menuListBadges: {
@@ -996,7 +1434,7 @@ const styles = StyleSheet.create({
   },
   offerHint: {
     fontSize: 12,
-    color: UI.textSecondary,
+    color: ui.textSecondary,
     fontWeight: '600',
     marginBottom: 8,
     lineHeight: 18,
@@ -1010,13 +1448,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: UI.textSecondary,
+    color: ui.textSecondary,
     fontWeight: '600',
     textAlign: 'center',
   },
   emptySubtext: {
     fontSize: 14,
-    color: UI.textMuted,
+    color: ui.textMuted,
     marginTop: 6,
     textAlign: 'center',
     lineHeight: 20,
@@ -1030,11 +1468,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f1f3f5',
   },
+  cartRowWeight: {
+    backgroundColor: 'rgba(255, 213, 79, 0.14)',
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  cartRowVariable: {
+    backgroundColor: 'rgba(66, 165, 245, 0.12)',
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
   cartInfo: { flex: 1, paddingRight: 8 },
   cartName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1a1a2e',
+    color: ui.textPrimary,
   },
   cartUnit: {
     fontSize: 12,
@@ -1045,7 +1495,7 @@ const styles = StyleSheet.create({
   cartTotal: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1a1a2e',
+    color: ui.textPrimary,
   },
   removeLink: {
     fontSize: 12,
@@ -1067,12 +1517,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: ui.borderLight,
   },
   qtyBtnText: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#1a1a2e',
+    color: ui.textPrimary,
     lineHeight: 20,
   },
   qtyValue: {
@@ -1080,7 +1530,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 14,
     fontWeight: '800',
-    color: '#1a1a2e',
+    color: ui.textPrimary,
   },
   emptyCart: {
     flex: 1,
@@ -1090,7 +1540,7 @@ const styles = StyleSheet.create({
   },
   emptyCartText: {
     fontSize: 15,
-    color: UI.textMuted,
+    color: ui.textMuted,
     fontWeight: '600',
   },
   customerLabel: {
@@ -1101,14 +1551,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   customerInput: {
-    backgroundColor: '#f8f9fa',
+    backgroundColor: ui.surfaceMuted,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: ui.borderLight,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#1a1a2e',
+    color: ui.textPrimary,
     marginBottom: 4,
   },
   paidBtn: {
@@ -1118,7 +1568,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#dee2e6',
+    borderColor: ui.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1142,7 +1592,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#e9ecef',
-    backgroundColor: '#fff',
+    backgroundColor: ui.surface,
     marginTop: 8,
   },
   billTotals: {
@@ -1165,13 +1615,13 @@ const styles = StyleSheet.create({
   billAmount: {
     fontSize: 26,
     fontWeight: '800',
-    color: '#1a1a2e',
+    color: ui.textPrimary,
   },
   phonePromptCard: {
     width: '100%',
     maxWidth: 380,
     alignSelf: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: ui.surface,
     borderRadius: 16,
     padding: 18,
     margin: 24,
@@ -1179,7 +1629,7 @@ const styles = StyleSheet.create({
   phonePromptTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#1a1a2e',
+    color: ui.textPrimary,
   },
   phonePromptSub: {
     marginTop: 6,
@@ -1189,14 +1639,14 @@ const styles = StyleSheet.create({
   },
   phonePromptInput: {
     marginTop: 14,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: ui.surfaceMuted,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: ui.borderLight,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#1a1a2e',
+    color: ui.textPrimary,
   },
   phonePromptActions: {
     flexDirection: 'row',
@@ -1216,7 +1666,7 @@ const styles = StyleSheet.create({
   },
   phonePromptOk: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: ui.textPrimary,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -1226,23 +1676,30 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   checkoutBtn: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: UI.radiusMd,
+    flex: 1.15,
+    minWidth: 112,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: ui.radiusMd,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkoutPressed: {
-    opacity: 0.85,
+    opacity: 0.9,
   },
   checkoutDisabled: {
-    backgroundColor: '#f4a5b4',
-    opacity: 0.7,
+    backgroundColor: '#6b7280',
+    opacity: 0.75,
+  },
+  checkoutText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   successBanner: {
-    backgroundColor: UI.successBg,
-    borderRadius: UI.radiusSm,
+    backgroundColor: ui.successBg,
+    borderRadius: ui.radiusSm,
     paddingVertical: 10,
     paddingHorizontal: 14,
     marginBottom: 8,
@@ -1250,14 +1707,57 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(43, 138, 62, 0.25)',
   },
   successText: {
-    color: UI.success,
+    color: ui.success,
     fontWeight: '700',
     fontSize: 14,
     textAlign: 'center',
   },
-  checkoutText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
+  upiOverlay: {
+    flex: 1,
+    backgroundColor: ui.overlay,
+    justifyContent: 'center',
+    padding: 20,
   },
-});
+  upiCard: {
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    gap: 10,
+  },
+  upiTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  upiHint: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  upiImage: {
+    width: 240,
+    height: 240,
+    marginVertical: 8,
+  },
+  upiShareBtn: {
+    marginTop: 8,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    width: '100%',
+    alignItems: 'center',
+  },
+  upiShareBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  upiDoneBtn: {
+    marginTop: 4,
+    paddingVertical: 12,
+  },
+  upiDoneBtnText: {
+    fontWeight: '800',
+    fontSize: 15,
+  },
+};
+}

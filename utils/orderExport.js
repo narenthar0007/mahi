@@ -347,7 +347,7 @@ export async function shareOrderExport({
 }
 
 export function getExportSummary(orders) {
-  const list = orders || [];
+  const list = (orders || []).filter((order) => order && !order.isWrongOrder);
   const totalRevenue = list.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
   const totalItems = list.reduce((sum, o) => sum + Number(o.itemCount || 0), 0);
   return { orderCount: list.length, totalRevenue, totalItems };

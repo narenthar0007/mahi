@@ -1,0 +1,37 @@
+# Order Status Change — Single
+curl --location --request PATCH 'http://localhost:3000/api/orders/ORD-000042/status' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "isPaid": true,
+  "isOrderReady": true
+}'
+
+# Order Status Change — Multiple
+curl --location --request PATCH 'http://localhost:3000/api/orders/status' \
+  --header 'X-App-Unique-Key: WSE6HS7J77' \
+  --header 'X-App-Key: 0C0C40GS0SCO8K4WWOCC' \
+  --header 'X-Secret-Token: 4SWK8COK4KKO44SOGOSG0W408' \
+  --header 'X-Client-Token: 4060064006' \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --data '{
+  "appUniqueKey": "WSE6HS7J77",
+  "updates": [
+    {
+      "id": "order-uuid-1",
+      "isPaid": true,
+      "isOrderReady": true
+    },
+    {
+      "id": "ORD-000042",
+      "isPaid": false,
+      "isOrderReady": false
+    }
+  ]
+}'

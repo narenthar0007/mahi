@@ -1,5 +1,7 @@
 import { Platform, Share } from 'react-native';
 import { isValidCustomerPhone, normalizePhoneNumber, sendViaWhatsApp } from './billShare';
+import { TABLE_COLORS, isRunningTableOrder } from './tableManagement';
+import { materializeUpiQrFile, normalizeUpiQrUri } from './upiQr';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -57,12 +59,33 @@ export function orderToInvoiceHtml({
   gstinNumber = '',
   customerPhone = '',
   title = 'Tax Invoice',
+  isTableOrder = false,
+  tableNumber = '',
+  isPaid = false,
 }) {
   const { dateLabel, timeLabel } = formatInvoiceDate(timestamp);
   const displayShop = shopName || 'POS';
   const subtotal = subtotalAmount !== undefined ? Number(subtotalAmount) : Number(totalAmount);
   const discount = Number(discountAmount) || 0;
   const discountLabel = offerName ? `Discount (${offerName})` : 'Discount';
+  const runningTable = isRunningTableOrder({ isTableOrder, isPaid });
+  const billTheme = runningTable
+    ? {
+        bodyBg: TABLE_COLORS.runningTableBill.bodyBg,
+        accent: TABLE_COLORS.runningTableBill.accent,
+        headerBg: TABLE_COLORS.runningTableBill.headerBg,
+        totalBg: TABLE_COLORS.runningTableBill.totalBg,
+        border: TABLE_COLORS.runningTableBill.border,
+        headerBorder: TABLE_COLORS.runningTableBill.accent,
+      }
+    : {
+        bodyBg: '#fff',
+        accent: '#e94560',
+        headerBg: '#1a1a2e',
+        totalBg: '#fff0f3',
+        border: '#dee2e6',
+        headerBorder: '#1a1a2e',
+      };
   const discountRow =
     offerApplied && discount > 0
       ? `<tr>
@@ -121,11 +144,11 @@ export function orderToInvoiceHtml({
       color: #1a1a2e;
       padding: 24px;
       margin: 0;
-      background: #fff;
+      background: ${billTheme.bodyBg};
     }
     .header {
       text-align: center;
-      border-bottom: 2px solid #1a1a2e;
+      border-bottom: 2px solid ${billTheme.headerBorder};
       padding-bottom: 16px;
       margin-bottom: 20px;
     }
@@ -138,9 +161,20 @@ export function orderToInvoiceHtml({
     .invoice-title {
       font-size: 14px;
       font-weight: 700;
-      color: #e94560;
+      color: ${billTheme.accent};
       text-transform: uppercase;
       letter-spacing: 1px;
+    }
+    .table-banner {
+      margin-top: 10px;
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: ${TABLE_COLORS.historyTableOrder.backgroundColor};
+      border: 1px solid ${TABLE_COLORS.historyTableOrder.borderColor};
+      color: ${TABLE_COLORS.runningTableBill.accent};
+      font-size: 12px;
+      font-weight: 800;
     }
     .meta {
       display: flex;
@@ -164,22 +198,22 @@ export function orderToInvoiceHtml({
       margin-bottom: 20px;
     }
     th, td {
-      border: 1px solid #dee2e6;
+      border: 1px solid ${billTheme.border};
       padding: 10px 8px;
       text-align: left;
       font-size: 12px;
     }
     th {
-      background: #1a1a2e;
+      background: ${billTheme.headerBg};
       color: #fff;
       font-weight: 700;
     }
-    tr:nth-child(even) { background: #f8f9fa; }
+    tr:nth-child(even) { background: ${runningTable ? '#fff7fb' : '#f8f9fa'}; }
     .total-row td {
       font-size: 15px;
       font-weight: 800;
-      background: #fff0f3;
-      color: #e94560;
+      background: ${billTheme.totalBg};
+      color: ${billTheme.accent};
     }
     .footer {
       text-align: center;
@@ -192,7 +226,12 @@ export function orderToInvoiceHtml({
 <body>
   <div class="header">
     <h1 class="shop-name">${escapeHtml(displayShop)}</h1>
-    <div class="invoice-title">${escapeHtml(title)}</div>
+    <div class="invoice-title">${escapeHtml(runningTable ? 'Table Bill (Running)' : title)}</div>
+    ${
+      isTableOrder && tableNumber
+        ? `<div class="table-banner">Table ${escapeHtml(tableNumber)}${runningTable ? ' · Occupied' : ''}</div>`
+        : ''
+    }
     ${
       fssaiNumber
         ? `<div style="font-size:12px;color:#495057;margin-top:6px;">FSSAI No: ${escapeHtml(fssaiNumber)}</div>`
@@ -214,6 +253,14 @@ export function orderToInvoiceHtml({
       <div class="meta-label">Date &amp; Time</div>
       <div>${escapeHtml(dateLabel)} · ${escapeHtml(timeLabel)}</div>
     </div>
+    ${
+      isTableOrder && tableNumber
+        ? `<div class="meta-block">
+      <div class="meta-label">Table</div>
+      <div>${escapeHtml(tableNumber)}</div>
+    </div>`
+        : ''
+    }
     ${
       customerPhone
         ? `<div class="meta-block">
@@ -297,6 +344,9 @@ function buildWebInvoicePdf({
   gstinNumber = '',
   customerPhone = '',
   title = 'Tax Invoice',
+  isTableOrder = false,
+  tableNumber = '',
+  isPaid = false,
 }) {
   const { jsPDF } = require('jspdf');
   const doc = new jsPDF();
@@ -308,6 +358,10 @@ function buildWebInvoicePdf({
   const { dateLabel, timeLabel } = formatInvoiceDate(timestamp);
   const displayShop = shopName || 'POS';
   const subtotal = subtotalAmount !== undefined ? Number(subtotalAmount) : Number(totalAmount);
+  const runningTable = isRunningTableOrder({ isTableOrder, isPaid });
+  const accentRgb = runningTable ? [219, 39, 119] : [233, 69, 96];
+  const headerRgb = runningTable ? [157, 23, 77] : [26, 26, 46];
+  const billTitle = runningTable ? 'TABLE BILL (RUNNING)' : title.toUpperCase();
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
@@ -315,10 +369,24 @@ function buildWebInvoicePdf({
   y += 8;
 
   doc.setFontSize(11);
-  doc.setTextColor(233, 69, 96);
-  doc.text(title.toUpperCase(), pageWidth / 2, y, { align: 'center' });
+  doc.setTextColor(accentRgb[0], accentRgb[1], accentRgb[2]);
+  doc.text(billTitle, pageWidth / 2, y, { align: 'center' });
   doc.setTextColor(26, 26, 46);
   y += 6;
+
+  if (isTableOrder && tableNumber) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(accentRgb[0], accentRgb[1], accentRgb[2]);
+    doc.text(
+      `Table ${tableNumber}${runningTable ? ' · Occupied' : ''}`,
+      pageWidth / 2,
+      y,
+      { align: 'center' }
+    );
+    doc.setTextColor(26, 26, 46);
+    y += 6;
+  }
 
   if (fssaiNumber) {
     doc.setFont('helvetica', 'normal');
@@ -336,7 +404,7 @@ function buildWebInvoicePdf({
 
   y += 4;
 
-  doc.setDrawColor(26, 26, 46);
+  doc.setDrawColor(headerRgb[0], headerRgb[1], headerRgb[2]);
   doc.line(margin, y, pageWidth - margin, y);
   y += 10;
 
@@ -346,6 +414,11 @@ function buildWebInvoicePdf({
   doc.text(`${dateLabel} · ${timeLabel}`, pageWidth - margin, y, { align: 'right' });
   y += 6;
 
+  if (isTableOrder && tableNumber) {
+    doc.text(`Table: ${tableNumber}`, margin, y);
+    y += 6;
+  }
+
   if (customerPhone) {
     doc.text(`Customer: ${customerPhone}`, margin, y);
     y += 6;
@@ -353,7 +426,7 @@ function buildWebInvoicePdf({
 
   y += 4;
   doc.setFont('helvetica', 'bold');
-  doc.setFillColor(26, 26, 46);
+  doc.setFillColor(headerRgb[0], headerRgb[1], headerRgb[2]);
   doc.rect(margin, y, contentWidth, 8, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(9);
@@ -408,7 +481,7 @@ function buildWebInvoicePdf({
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.setTextColor(233, 69, 96);
+  doc.setTextColor(accentRgb[0], accentRgb[1], accentRgb[2]);
   doc.text(
     `${taxEnabled ? 'Grand Total' : 'Total'}: Rs ${Number(totalAmount || 0).toFixed(2)}`,
     pageWidth - margin,
@@ -554,6 +627,17 @@ async function sharePdfFileUri(uri, dialogTitle, { deliverViaWhatsApp = false, c
   }
 }
 
+function appendWebsiteLinks(lines, invoiceData) {
+  if (!invoiceData?.includeWebsitesInWhatsApp) return;
+  const shopWebsite = String(invoiceData.shopWebsite || '').trim();
+  const menuWebsite = String(invoiceData.menuWebsite || '').trim();
+  if (!shopWebsite && !menuWebsite) return;
+
+  lines.push('');
+  if (shopWebsite) lines.push(`Shop website: ${shopWebsite}`);
+  if (menuWebsite) lines.push(`Menu: ${menuWebsite}`);
+}
+
 function buildWhatsAppInvoiceText(invoiceData) {
   const {
     items = [],
@@ -569,15 +653,21 @@ function buildWhatsAppInvoiceText(invoiceData) {
     timestamp,
     orderId,
     shopName,
+    isTableOrder = false,
+    tableNumber = '',
+    isPaid = false,
   } = invoiceData;
 
   const { dateLabel, timeLabel } = formatInvoiceDate(timestamp);
+  const runningTable = isRunningTableOrder({ isTableOrder, isPaid });
   const lines = [
     shopName ? `*${shopName}*` : '*Invoice*',
+    runningTable ? '*Table Bill (Running)*' : '',
     `Order ID: ${orderId || '-'}`,
+    isTableOrder && tableNumber ? `Table: ${tableNumber}` : '',
     `${dateLabel} · ${timeLabel}`,
     '',
-  ];
+  ].filter(Boolean);
 
   (items || []).slice(0, 10).forEach((line, index) => {
     lines.push(
@@ -610,8 +700,101 @@ function buildWhatsAppInvoiceText(invoiceData) {
     lines.push(`*Total: Rs ${Number(totalAmount || 0).toFixed(2)}*`);
   }
   lines.push('', 'Thank you for your purchase!');
+  if (normalizeUpiQrUri(invoiceData?.upiQrUri)) {
+    lines.push('', 'Pay via UPI — scan the QR code image shared with this bill.');
+  }
+  appendWebsiteLinks(lines, invoiceData);
 
   return lines.join('\n');
+}
+
+async function shareImageViaWhatsAppAndroid(fileUri, mimeType, caption, customerPhone) {
+  const phone = normalizePhoneNumber(customerPhone);
+  if (!phone) return false;
+
+  const FileSystem = await import('expo-file-system/legacy');
+  const IntentLauncher = await import('expo-intent-launcher');
+
+  let contentUri = fileUri;
+  if (FileSystem.getContentUriAsync) {
+    try {
+      contentUri = await FileSystem.getContentUriAsync(fileUri);
+    } catch {
+      // keep file URI
+    }
+  }
+
+  for (const packageName of WHATSAPP_PACKAGES) {
+    try {
+      await IntentLauncher.startActivityAsync('android.intent.action.SEND', {
+        packageName,
+        type: mimeType || 'image/jpeg',
+        flags: 1,
+        extra: {
+          'android.intent.extra.STREAM': contentUri,
+          'android.intent.extra.TEXT': String(caption || '').slice(0, 2800),
+          jid: `${phone}@s.whatsapp.net`,
+        },
+      });
+      return true;
+    } catch {
+      // try next package
+    }
+  }
+  return false;
+}
+
+/**
+ * Share UPI QR photo. WhatsApp text links (wa.me) cannot attach images —
+ * on Android we open WhatsApp with the image + caption; otherwise system share.
+ */
+export async function shareUpiQrOnWhatsApp({
+  upiQrUri,
+  caption = '',
+  customerPhone = '',
+  dialogTitle = 'Share UPI QR',
+} = {}) {
+  const dataUri = normalizeUpiQrUri(upiQrUri);
+  if (!dataUri) return { shared: false, reason: 'no_qr' };
+
+  if (Platform.OS === 'web') {
+    // Web: open image in a new tab; user can save/forward manually.
+    try {
+      const win = window.open();
+      if (win) {
+        win.document.write(
+          `<title>${dialogTitle}</title><img src="${dataUri}" style="max-width:100%;height:auto" alt="UPI QR" />`
+        );
+      }
+      return { shared: true, method: 'web_preview' };
+    } catch {
+      return { shared: false, reason: 'web_failed' };
+    }
+  }
+
+  const file = await materializeUpiQrFile(dataUri);
+
+  if (Platform.OS === 'android' && isValidCustomerPhone(customerPhone)) {
+    const sent = await shareImageViaWhatsAppAndroid(
+      file.uri,
+      file.mimeType,
+      caption,
+      customerPhone
+    );
+    if (sent) return { shared: true, method: 'whatsapp_intent' };
+  }
+
+  const Sharing = await import('expo-sharing');
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(file.uri, {
+      mimeType: file.mimeType || 'image/jpeg',
+      dialogTitle,
+    });
+    return { shared: true, method: 'share_sheet' };
+  }
+
+  await Share.share({ url: file.uri, message: caption, title: dialogTitle });
+  return { shared: true, method: 'share_api' };
 }
 
 export async function shareWhatsAppInvoiceText(invoiceData) {
@@ -620,8 +803,31 @@ export async function shareWhatsAppInvoiceText(invoiceData) {
     throw new Error('invalid_phone');
   }
 
-  await sendViaWhatsApp(buildWhatsAppInvoiceText(invoiceData), phone);
-  return true;
+  const text = buildWhatsAppInvoiceText(invoiceData);
+  const upiQrUri = normalizeUpiQrUri(invoiceData?.upiQrUri);
+
+  // Prefer sending QR image with bill caption (WhatsApp accepts image + text on Android).
+  if (upiQrUri) {
+    try {
+      const imageShare = await shareUpiQrOnWhatsApp({
+        upiQrUri,
+        caption: text,
+        customerPhone: phone,
+        dialogTitle: 'Share bill + UPI QR',
+      });
+      if (imageShare.shared && imageShare.method === 'whatsapp_intent') {
+        return { textSent: true, qrShared: true, method: imageShare.method };
+      }
+      // Share sheet used — still open chat with text so customer gets the bill words.
+      await sendViaWhatsApp(text, phone);
+      return { textSent: true, qrShared: imageShare.shared, method: imageShare.method };
+    } catch (error) {
+      console.warn('UPI QR WhatsApp share failed, falling back to text:', error);
+    }
+  }
+
+  await sendViaWhatsApp(text, phone);
+  return { textSent: true, qrShared: false };
 }
 
 export async function shareOrderInvoicePdf({
@@ -641,9 +847,15 @@ export async function shareOrderInvoicePdf({
   fssaiNumber = '',
   gstinNumber = '',
   customerPhone = '',
+  shopWebsite = '',
+  menuWebsite = '',
+  includeWebsitesInWhatsApp = false,
   title = 'Tax Invoice',
   openWhatsAppChat = true,
   sharePdf = true,
+  isTableOrder = false,
+  tableNumber = '',
+  isPaid = false,
 }) {
   const safeOrderId = sanitizeFileName(orderId || 'order');
   const fileName = `invoice_${safeOrderId}.pdf`;
@@ -665,7 +877,13 @@ export async function shareOrderInvoicePdf({
     fssaiNumber,
     gstinNumber,
     customerPhone,
+    shopWebsite,
+    menuWebsite,
+    includeWebsitesInWhatsApp,
     title,
+    isTableOrder,
+    tableNumber,
+    isPaid,
   };
 
   if (Platform.OS === 'web') {

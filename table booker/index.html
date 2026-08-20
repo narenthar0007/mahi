@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurant Waitlist Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #fafafa;
+            --card-bg: #ffffff;
+            --text: #1a1a2e;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.07), 0 10px 10px -5px rgba(0, 0, 0, 0.03);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --accent: #f97316;
+            --accent-hover: #ea580c;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --info: #3b82f6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 40px 20px;
+            background-image:
+                radial-gradient(at 40% 20%, hsla(28, 100%, 74%, 0.1) 0px, transparent 50%),
+                radial-gradient(at 80% 0%, hsla(189, 100%, 56%, 0.08) 0px, transparent 50%),
+                radial-gradient(at 0% 50%, hsla(340, 100%, 76%, 0.08) 0px, transparent 50%);
+        }
+
+        .app-container {
+            max-width: 680px;
+            margin: 0 auto;
+        }
+
+        .app-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .app-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #4a4a6a 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .app-header p {
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 28px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            margin-bottom: 24px;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .card-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .card-icon.orange {
+            background: #fff7ed;
+            color: var(--accent);
+        }
+
+        .card-icon.green {
+            background: #f0fdf4;
+            color: var(--success);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            box-sizing: border-box;
+            font-size: 15px;
+            font-family: inherit;
+            transition: all 0.2s ease;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+            background: white;
+        }
+
+        input::placeholder {
+            color: #94a3b8;
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
+            background: var(--text);
+            color: white;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: inherit;
+            transition: all 0.2s ease;
+            margin-top: 4px;
+        }
+
+        .btn-submit:hover {
+            background: #2a2a4e;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
+        }
+
+        .queue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding: 0 4px;
+        }
+
+        .queue-title {
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .queue-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--text);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .queue-badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .queue-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 20px;
+            background: white;
+            margin-bottom: 12px;
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--text);
+            transition: all 0.3s ease;
+            animation: slideIn 0.4s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .queue-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .queue-item .customer-info strong {
+            font-size: 17px;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 4px;
+            color: var(--text);
+        }
+
+        .queue-item .customer-info small {
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .queue-item .customer-info small::before {
+            content: '👥';
+            font-style: normal;
+        }
+
+        .queue-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background: var(--bg);
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-right: 12px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .actions button {
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            color: white;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        .actions button:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.1);
+        }
+
+        .actions button:active {
+            transform: translateY(0);
+        }
+
+        .btn-wa {
+            background: var(--success);
+        }
+
+        .btn-tts {
+            background: var(--info);
+        }
+
+        .btn-done {
+            background: var(--danger);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 50px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 56px;
+            margin-bottom: 12px;
+            opacity: 0.8;
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 6px;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .filter-section {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-input {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .filter-input input {
+            padding: 10px 12px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            background: var(--card-bg);
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 8px 14px;
+            border: 1.5px solid var(--border);
+            background: var(--card-bg);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .filter-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .filter-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .filter-reset {
+            padding: 8px 14px;
+            border: 1.5px solid var(--border);
+            background: var(--card-bg);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: all 0.2s ease;
+        }
+
+        .filter-reset:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 20px 16px;
+            }
+
+            .queue-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 14px;
+                padding: 16px;
+            }
+
+            .actions {
+                width: 100%;
+            }
+
+            .actions button {
+                flex: 1;
+                justify-content: center;
+            }
+
+            .app-header h1 {
+                font-size: 24px;
+            }
+
+            .filter-section {
+                flex-direction: column;
+            }
+
+            .filter-input {
+                width: 100%;
+            }
+
+            .filter-buttons {
+                width: 100%;
+            }
+
+            .filter-btn {
+                flex: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <div class="app-header">
+            <h1>🍽️ Table Booker</h1>
+            <p>Restaurant Waitlist Management</p>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon orange">✏️</div>
+                <div class="card-title">Add to Waitlist</div>
+            </div>
+            <form id="waitlist-form">
+                <div class="form-group">
+                    <label for="name">Customer Name</label>
+                    <input type="text" id="name" placeholder="Enter customer name" required>
+                </div>
+                <div class="form-group">
+                    <label for="phone">Mobile Number</label>
+                    <input type="tel" id="phone" placeholder="Include country code" required>
+                </div>
+                <div class="form-group">
+                    <label for="party">Party Size</label>
+                    <input type="number" id="party" placeholder="Number of guests" required min="1">
+                </div>
+                <button type="submit" class="btn-submit">Add to Queue</button>
+            </form>
+        </div>
+
+        <div class="queue-header">
+            <div class="queue-title">Live Waitlist</div>
+            <span id="queue-count" class="queue-badge">0 Waiting</span>
+        </div>
+
+        <div class="filter-section">
+            <div class="filter-input">
+                <input type="number" id="party-filter" placeholder="Filter by party size..." min="1">
+            </div>
+            <div class="filter-buttons" id="filter-buttons"></div>
+            <button class="filter-reset" id="reset-filter">Clear</button>
+        </div>
+
+        <div id="queue-container">
+        </div>
+    </div>
+
+    <script>
+        let queue = JSON.parse(localStorage.getItem('waitlistData')) || [];
+        let filterByParty = null;
+
+        const form = document.getElementById('waitlist-form');
+        const queueContainer = document.getElementById('queue-container');
+        const queueCount = document.getElementById('queue-count');
+        const partyFilterInput = document.getElementById('party-filter');
+        const filterButtonsContainer = document.getElementById('filter-buttons');
+        const resetFilterBtn = document.getElementById('reset-filter');
+
+        function saveToLocalStorage() {
+            localStorage.setItem('waitlistData', JSON.stringify(queue));
+        }
+
+        function getUniquePartySizes() {
+            const sizes = [...new Set(queue.map(c => parseInt(c.party)))];
+            return sizes.sort((a, b) => a - b);
+        }
+
+        function updateFilterButtons() {
+            filterButtonsContainer.innerHTML = '';
+            const partySizes = getUniquePartySizes();
+
+            partySizes.forEach(size => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `filter-btn ${filterByParty === size ? 'active' : ''}`;
+                btn.textContent = `Party ${size}`;
+                btn.onclick = () => {
+                    filterByParty = filterByParty === size ? null : size;
+                    updateFilterButtons();
+                    renderQueue();
+                };
+                filterButtonsContainer.appendChild(btn);
+            });
+        }
+
+        function getFilteredQueue() {
+            if (filterByParty === null) {
+                return queue;
+            }
+            return queue.filter(c => parseInt(c.party) === filterByParty);
+        }
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+            const party = document.getElementById('party').value;
+
+            const customer = { id: Date.now(), name, phone, party };
+            queue.push(customer);
+
+            saveToLocalStorage();
+            updateFilterButtons();
+
+            form.reset();
+            renderQueue();
+            document.getElementById('name').focus();
+        });
+
+        partyFilterInput.addEventListener('input', function (e) {
+            const value = e.target.value.trim();
+            if (value === '') {
+                filterByParty = null;
+            } else {
+                filterByParty = parseInt(value);
+            }
+            updateFilterButtons();
+            renderQueue();
+        });
+
+        resetFilterBtn.addEventListener('click', function () {
+            filterByParty = null;
+            partyFilterInput.value = '';
+            updateFilterButtons();
+            renderQueue();
+        });
+
+        function renderQueue() {
+            const filteredQueue = getFilteredQueue();
+            queueContainer.innerHTML = '';
+
+            const totalCount = queue.length;
+            const filteredCount = filteredQueue.length;
+
+            if (filterByParty !== null) {
+                queueCount.innerHTML = `${filteredCount}/${totalCount} Waiting`;
+            } else {
+                queueCount.innerHTML = `${totalCount} Waiting`;
+            }
+
+            if (filteredQueue.length === 0) {
+                if (filterByParty !== null) {
+                    queueContainer.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🔍</div>
+                            <h3>No matches found</h3>
+                            <p>No customers with party size ${filterByParty}</p>
+                        </div>
+                    `;
+                } else {
+                    queueContainer.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🎭</div>
+                            <h3>No one is waiting</h3>
+                            <p>Add a customer to the waitlist to get started</p>
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            filteredQueue.forEach((customer, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'queue-item';
+                itemDiv.style.animationDelay = `${index * 0.05}s`;
+
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'customer-info';
+                infoDiv.innerHTML = `
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span class="queue-number">${index + 1}</span>
+                        <div>
+                            <strong>${customer.name}</strong>
+                            <small>👥 Party of ${customer.party} • ${customer.phone}</small>
+                        </div>
+                    </div>
+                `;
+
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'actions';
+
+                const waBtn = document.createElement('button');
+                waBtn.className = 'btn-wa';
+                waBtn.innerHTML = '💬 Notify';
+                waBtn.onclick = () => openWhatsApp(customer);
+
+                const ttsBtn = document.createElement('button');
+                ttsBtn.className = 'btn-tts';
+                ttsBtn.innerHTML = '📢 Announce';
+                ttsBtn.onclick = () => announce(customer);
+
+                const doneBtn = document.createElement('button');
+                doneBtn.className = 'btn-done';
+                doneBtn.innerHTML = '✓ Done';
+                doneBtn.onclick = () => removeCustomer(customer.id);
+
+                actionsDiv.appendChild(waBtn);
+                actionsDiv.appendChild(ttsBtn);
+                actionsDiv.appendChild(doneBtn);
+
+                itemDiv.appendChild(infoDiv);
+                itemDiv.appendChild(actionsDiv);
+                queueContainer.appendChild(itemDiv);
+            });
+        }
+
+        function openWhatsApp(customer) {
+            const cleanPhone = customer.phone.replace(/[^0-9]/g, '');
+            const message = `Hey ${customer.name}, your table for ${customer.party} is ready!`;
+            const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+            window.open(url, '_blank');
+        }
+
+        function announce(customer) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const message = `Table ready for ${customer.name}, party of ${customer.party}.`;
+                const utterance = new SpeechSynthesisUtterance(message);
+                utterance.rate = 0.9;
+                window.speechSynthesis.speak(utterance);
+            } else {
+                alert("Sorry, Text-to-speech is not supported in your browser.");
+            }
+        }
+
+        function removeCustomer(id) {
+            queue = queue.filter(c => c.id !== id);
+            saveToLocalStorage();
+            updateFilterButtons();
+            renderQueue();
+        }
+
+        updateFilterButtons();
+        renderQueue();
+    </script>
+</body>
+
+</html>

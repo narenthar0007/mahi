@@ -282,15 +282,73 @@
       letter-spacing: 4px;
       text-align: center;
     }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #0f172a;
+      color: var(--muted);
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      border-color: var(--accent);
+      background: rgba(233, 69, 96, 0.15);
+      color: var(--text);
+    }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .cred-row {
+      margin-bottom: 14px;
+    }
+
+    .cred-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent2);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .cred-value {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 1.05rem;
+      letter-spacing: 1px;
+      padding: 12px 14px;
+      background: #0f172a;
+      border-radius: 10px;
+      color: #fbbf24;
+      word-break: break-all;
+      flex: 1;
+      min-width: 0;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>🔑 POS License Generator</h1>
-      <p>Create 20-character alphanumeric keys with an expiry period. Expired keys block app access.</p>
+      <h1>🔑 POS Support Tools</h1>
+      <p>Generate license keys and API credentials for NAM bill (com.riye.posbilling).</p>
     </header>
 
+    <div class="tabs">
+      <button type="button" class="tab-btn active" data-panel="licensePanel">License Keys</button>
+      <button type="button" class="tab-btn" data-panel="apiPanel">API Credentials</button>
+    </div>
+
+    <div class="panel active" id="licensePanel">
     <div class="card">
       <h2>Shop Details</h2>
       <label for="shopName">Shop / POS Name (for your records)</label>
@@ -366,6 +424,93 @@
         <strong>com.riye.posbilling</strong> and will not work in other apps.
       </p>
     </div>
+    </div>
+
+    <div class="panel" id="apiPanel">
+      <div class="card">
+        <h2>API Credentials (Support)</h2>
+        <p class="secret-hint" style="margin-bottom: 12px;">
+          Customer taps <strong>Generate</strong> in Settings → API Keys to create a
+          <strong>10-character App Unique Key</strong>, then sends it to you.
+          Enter that key here to generate App Key (20), Secret Token (25), and Client Token (10).
+          Send those three tokens back — customer pastes them into Settings.
+        </p>
+
+        <label for="apiAdminSecret">Admin Secret (do not share)</label>
+        <input type="password" id="apiAdminSecret" value="RIYE_POS_SECRET_2026" />
+        <p class="secret-hint">Must match the secret embedded in the mobile app.</p>
+
+        <label for="apiUniqueKeyInput">App Unique Key (10 alphanumeric from customer)</label>
+        <input
+          type="text"
+          id="apiUniqueKeyInput"
+          class="code-input"
+          placeholder="A1B2C3D4E5"
+          maxlength="10"
+          autocomplete="off"
+          spellcheck="false"
+        />
+
+        <label for="apiShopName">Shop / POS Name (for your records)</label>
+        <input type="text" id="apiShopName" placeholder="Optional — for support notes" />
+
+        <button type="button" class="generate-btn" id="generateApiBtn">Generate API Credentials</button>
+        <div class="generate-error" id="apiGenerateError"></div>
+
+        <div class="result" id="apiResult">
+          <h3>API Credentials</h3>
+
+          <div class="cred-row">
+            <div class="cred-label">App Unique Key (10)</div>
+            <div class="key-row">
+              <div class="cred-value" id="outUniqueKey"></div>
+              <button type="button" class="copy-icon-btn" data-copy="outUniqueKey" title="Copy" aria-label="Copy">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="cred-row">
+            <div class="cred-label">App Key (20)</div>
+            <div class="key-row">
+              <div class="cred-value" id="outAppKey"></div>
+              <button type="button" class="copy-icon-btn" data-copy="outAppKey" title="Copy" aria-label="Copy">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="cred-row">
+            <div class="cred-label">Secret Token (25 alphanumeric)</div>
+            <div class="key-row">
+              <div class="cred-value" id="outSecretToken"></div>
+              <button type="button" class="copy-icon-btn" data-copy="outSecretToken" title="Copy" aria-label="Copy">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="cred-row">
+            <div class="cred-label">Client Token (10 digits)</div>
+            <div class="key-row">
+              <div class="cred-value" id="outClientToken"></div>
+              <button type="button" class="copy-icon-btn" data-copy="outClientToken" title="Copy" aria-label="Copy">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="meta" id="apiMetaOutput" style="margin-top: 8px;"></div>
+          <button type="button" class="copy-btn" id="copyAllApiBtn">Copy All for Customer</button>
+        </div>
+
+        <p class="note">
+          Postman / curl headers:<br>
+          <code>X-App-Unique-Key</code>, <code>X-App-Key</code>,
+          <code>X-Secret-Token</code>, <code>X-Client-Token</code>
+        </p>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -373,6 +518,12 @@
     const APP_LICENSE_ID = 'com.riye.posbilling';
     const RENEWAL_CODE_LENGTH = 10;
     const RENEWAL_CODE_VALID_MS = 45 * 60 * 1000;
+    const APP_UNIQUE_KEY_LENGTH = 10;
+    const APP_KEY_LENGTH = 20;
+    const SECRET_TOKEN_LENGTH = 25;
+    const CLIENT_TOKEN_LENGTH = 10;
+    const ALPHA_NUM = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const DIGITS = '0123456789';
     // New format (v2): [ISSUE(4)][EXPIRY(4)][SIG(12)] = 20 chars
     const ISSUE_LEN_V2 = 4;
     const EXPIRY_LEN_V2 = 4;
@@ -390,6 +541,45 @@
         sig += CHARS[state % 36];
       }
       return sig;
+    }
+
+    function computeCharsetSignature(input, charset, length) {
+      let state = 0;
+      for (let i = 0; i < input.length; i++) {
+        state = (state * 31 + input.charCodeAt(i)) >>> 0;
+      }
+      let out = '';
+      for (let i = 0; i < length; i++) {
+        state = (state * 1103515245 + 12345 + input.charCodeAt(i % input.length)) >>> 0;
+        out += charset[state % charset.length];
+      }
+      return out;
+    }
+
+    function normalizeAppUniqueKey(value) {
+      return String(value || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^0-9A-Z]/g, '')
+        .slice(0, APP_UNIQUE_KEY_LENGTH);
+    }
+
+    function generateApiCredentials(appUniqueKey, secret = LICENSE_SECRET_DEFAULT, appId = APP_LICENSE_ID) {
+      const unique = normalizeAppUniqueKey(appUniqueKey);
+      if (unique.length !== APP_UNIQUE_KEY_LENGTH) {
+        return {
+          success: false,
+          error: `App Unique Key must be exactly ${APP_UNIQUE_KEY_LENGTH} alphanumeric characters.`,
+        };
+      }
+      const base = `${secret}:${appId}:${unique}`;
+      return {
+        success: true,
+        appUniqueKey: unique,
+        appKey: computeCharsetSignature(`${base}:APP_KEY`, ALPHA_NUM, APP_KEY_LENGTH),
+        secretToken: computeCharsetSignature(`${base}:SECRET`, ALPHA_NUM, SECRET_TOKEN_LENGTH),
+        clientToken: computeCharsetSignature(`${base}:CLIENT`, DIGITS, CLIENT_TOKEN_LENGTH),
+      };
     }
 
     function generateLicenseKey(expiryDate, secret, appId = APP_LICENSE_ID) {
@@ -702,6 +892,110 @@
 
     copyBtn.addEventListener('click', copyGeneratedKey);
     copyIconBtn.addEventListener('click', copyGeneratedKey);
+
+    // --- Tabs ---
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.panel).classList.add('active');
+      });
+    });
+
+    // --- API credentials ---
+    const apiUniqueKeyInput = document.getElementById('apiUniqueKeyInput');
+    const generateApiBtn = document.getElementById('generateApiBtn');
+    const apiGenerateError = document.getElementById('apiGenerateError');
+    const apiResult = document.getElementById('apiResult');
+    const copyAllApiBtn = document.getElementById('copyAllApiBtn');
+
+    apiUniqueKeyInput.addEventListener('input', () => {
+      apiUniqueKeyInput.value = normalizeAppUniqueKey(apiUniqueKeyInput.value);
+    });
+
+    function showApiError(message) {
+      apiGenerateError.textContent = message;
+      apiGenerateError.classList.add('show');
+      apiResult.classList.remove('show');
+    }
+
+    function clearApiError() {
+      apiGenerateError.textContent = '';
+      apiGenerateError.classList.remove('show');
+    }
+
+    generateApiBtn.addEventListener('click', () => {
+      clearApiError();
+      const secret = document.getElementById('apiAdminSecret').value.trim() || LICENSE_SECRET_DEFAULT;
+      const shop = document.getElementById('apiShopName').value.trim();
+      const result = generateApiCredentials(apiUniqueKeyInput.value, secret, APP_LICENSE_ID);
+
+      if (!result.success) {
+        showApiError(result.error);
+        return;
+      }
+
+      document.getElementById('outUniqueKey').textContent = result.appUniqueKey;
+      document.getElementById('outAppKey').textContent = result.appKey;
+      document.getElementById('outSecretToken').textContent = result.secretToken;
+      document.getElementById('outClientToken').textContent = result.clientToken;
+      document.getElementById('apiMetaOutput').innerHTML = `
+        <strong>Shop:</strong> ${shop || '(not set)'}<br>
+        <strong>App lock:</strong> ${APP_LICENSE_ID}<br>
+        <strong>Send to customer:</strong> App Key + Secret Token + Client Token<br>
+        <strong>Customer keeps:</strong> App Unique Key (already in their Settings)
+      `;
+      apiResult.classList.add('show');
+      apiResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      copyAllApiBtn.textContent = 'Copy All for Customer';
+      copyAllApiBtn.classList.remove('copied');
+    });
+
+    document.querySelectorAll('[data-copy]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const el = document.getElementById(btn.dataset.copy);
+        const text = el?.textContent || '';
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.classList.add('copied');
+          setTimeout(() => btn.classList.remove('copied'), 1200);
+        } catch {
+          prompt('Copy:', text);
+        }
+      });
+    });
+
+    copyAllApiBtn.addEventListener('click', async () => {
+      const unique = document.getElementById('outUniqueKey').textContent;
+      const appKey = document.getElementById('outAppKey').textContent;
+      const secret = document.getElementById('outSecretToken').textContent;
+      const client = document.getElementById('outClientToken').textContent;
+      if (!appKey) return;
+
+      const blob = [
+        'NAM bill API credentials',
+        `App Unique Key: ${unique}`,
+        `App Key: ${appKey}`,
+        `Secret Token: ${secret}`,
+        `Client Token: ${client}`,
+        '',
+        'Postman / curl headers:',
+        `X-App-Unique-Key: ${unique}`,
+        `X-App-Key: ${appKey}`,
+        `X-Secret-Token: ${secret}`,
+        `X-Client-Token: ${client}`,
+      ].join('\n');
+
+      try {
+        await navigator.clipboard.writeText(blob);
+        copyAllApiBtn.textContent = 'Copied!';
+        copyAllApiBtn.classList.add('copied');
+      } catch {
+        prompt('Copy credentials:', blob);
+      }
+    });
   </script>
 </body>
 </html>

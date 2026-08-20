@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NAM bill Lux — Royal POS Billing Experience</title>
+  <meta name="description" content="The luxury presentation of NAM bill — premium POS billing with gold-foil craftsmanship, product screenshots, and royal design for shops and cafés." />
+  <meta name="theme-color" content="#030910" />
+  <link rel="icon" type="image/png" href="./assets/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/luxury.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <div class="nav-wrap" id="navWrap">
+    <nav class="nav" aria-label="Primary">
+      <a class="brand" href="#top">
+        <img src="./assets/nam-bill-logo.png" width="38" height="38" alt="" />
+        <span class="brand-name">NAM bill <em>Lux</em></span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#showcase">Showcase</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#gallery">Gallery</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="./index.html">Classic</a></li>
+        <li><a href="./funky.html">Funky</a></li>
+        <li><a href="./newspaper.html">Paper</a></li>
+        <li><a href="./glass.html">Glass</a></li>
+        <li><a href="./kitchen.html">Kitchen</a></li>
+        <li><a href="./bengaluru.html">Bengaluru</a></li>
+      </ul>
+      <a class="btn btn-gold nav-cta" href="#contact">Request access</a>
+      <button class="nav-toggle" type="button" id="navToggle" aria-expanded="false" aria-controls="mobileMenu" aria-label="Open menu">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round"/></svg>
+      </button>
+    </nav>
+  </div>
+
+  <div class="mobile-menu" id="mobileMenu" hidden>
+    <div class="mobile-panel">
+      <a href="#showcase">Showcase</a>
+      <a href="#features">Features</a>
+      <a href="#gallery">Gallery</a>
+      <a href="#pricing">Pricing</a>
+      <a href="./index.html">Classic</a>
+      <a href="./funky.html">Funky</a>
+      <a href="./newspaper.html">Paper</a>
+      <a href="./glass.html">Glass</a>
+      <a href="./kitchen.html">Kitchen</a>
+      <a href="./bengaluru.html">Bengaluru</a>
+      <a class="btn btn-gold" href="#contact">Request access</a>
+    </div>
+  </div>
+
+  <main id="main">
+    <!-- HERO -->
+    <header class="hero" id="top">
+      <div class="hero-atmosphere" aria-hidden="true">
+        <div class="hero-orb gold"></div>
+        <div class="hero-orb teal"></div>
+        <div class="hero-rays"></div>
+        <div class="hero-noise"></div>
+        <div class="hero-vignette"></div>
+      </div>
+
+      <div class="hero-layout">
+        <div class="hero-copy">
+          <p class="lux-kicker">Edition Lux · 2026</p>
+          <div class="hero-brand">
+            <img src="./assets/nam-bill-logo.png" width="68" height="68" alt="" />
+            <span>NAM bill</span>
+          </div>
+          <div class="foil-mini" aria-hidden="true">
+            <span class="foil-line"></span>
+            <span class="foil-gem"></span>
+            <span class="foil-line"></span>
+          </div>
+          <h1>The royal standard of counter billing</h1>
+          <p class="hero-lead">
+            A luminous POS experience — inventory, GST invoices, WhatsApp PDFs, and sales history — presented with the polish your shop deserves.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-gold" href="#contact">
+              Unlock your license
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </a>
+            <a class="btn btn-ghost-lux" href="#showcase">View product shots</a>
+          </div>
+        </div>
+
+        <!-- Real product UI screenshots in device frames -->
+        <div class="hero-showcase" id="showcase" aria-label="Product screenshots">
+          <div class="shot-stage">
+            <figure class="phone-frame phone-side phone-left" data-shot="inventory">
+              <div class="phone-bezel">
+                <div class="phone-speaker"></div>
+                <img src="./assets/shot-inventory.svg" width="390" height="844" alt="NAM bill Add Items inventory screen with variants and add-ons" />
+              </div>
+              <figcaption>Inventory</figcaption>
+            </figure>
+
+            <figure class="phone-frame phone-main is-active" data-shot="billing">
+              <div class="phone-glow" aria-hidden="true"></div>
+              <div class="phone-bezel">
+                <div class="phone-speaker"></div>
+                <img src="./assets/shot-billing.svg" width="390" height="844" alt="NAM bill Billing screen showing menu grid, cart total, and checkout" />
+              </div>
+              <figcaption>Billing</figcaption>
+            </figure>
+
+            <figure class="phone-frame phone-side phone-right" data-shot="history">
+              <div class="phone-bezel">
+                <div class="phone-speaker"></div>
+                <img src="./assets/shot-history.svg" width="390" height="844" alt="NAM bill Order History with revenue summary and WhatsApp status" />
+              </div>
+              <figcaption>History</figcaption>
+            </figure>
+          </div>
+
+          <div class="shot-controls" role="tablist" aria-label="Choose screenshot">
+            <button type="button" class="shot-dot is-active" role="tab" aria-selected="true" data-target="billing">Billing</button>
+            <button type="button" class="shot-dot" role="tab" aria-selected="false" data-target="inventory">Inventory</button>
+            <button type="button" class="shot-dot" role="tab" aria-selected="false" data-target="history">History</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- GOLD FOIL DIVIDER -->
+    <div class="foil-divider" aria-hidden="true">
+      <svg class="foil-svg" viewBox="0 0 1200 48" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="foilGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#5C4A1F" />
+            <stop offset="20%" stop-color="#C9A84C" />
+            <stop offset="50%" stop-color="#F5E6B8" />
+            <stop offset="80%" stop-color="#C9A84C" />
+            <stop offset="100%" stop-color="#5C4A1F" />
+          </linearGradient>
+          <linearGradient id="foilShine" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="rgba(255,255,255,0)" />
+            <stop offset="45%" stop-color="rgba(255,255,255,0)" />
+            <stop offset="50%" stop-color="rgba(255,255,255,0.85)" />
+            <stop offset="55%" stop-color="rgba(255,255,255,0)" />
+            <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+            <animateTransform attributeName="gradientTransform" type="translate" from="-1 0" to="1 0" dur="3.2s" repeatCount="indefinite" />
+          </linearGradient>
+        </defs>
+        <line x1="40" y1="24" x2="540" y2="24" stroke="url(#foilGrad)" stroke-width="1.5" />
+        <line x1="660" y1="24" x2="1160" y2="24" stroke="url(#foilGrad)" stroke-width="1.5" />
+        <rect x="585" y="10" width="30" height="30" transform="rotate(45 600 25)" fill="url(#foilGrad)" stroke="#F5E6B8" stroke-width="0.6" />
+        <rect x="0" y="0" width="1200" height="48" fill="url(#foilShine)" style="mix-blend-mode: soft-light" />
+      </svg>
+      <div class="foil-shimmer"></div>
+    </div>
+
+    <section class="features" id="features">
+      <div class="container">
+        <div class="section-head reveal">
+          <div class="foil-mini dark" aria-hidden="true">
+            <span class="foil-line"></span>
+            <span class="foil-gem"></span>
+            <span class="foil-line"></span>
+          </div>
+          <span class="eyebrow">Signature capabilities</span>
+          <h2>Crafted for counters that refuse ordinary tools</h2>
+          <p>Every flow — from menu tap to WhatsApp invoice — is tuned for speed and quiet luxury.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-lux reveal">
+            <div class="feature-num">01</div>
+            <h3>Billing theatre</h3>
+            <p>Grid or list menu, variants, add-ons, GST — checkout without breaking the rush.</p>
+          </article>
+          <article class="feature-lux reveal">
+            <div class="feature-num">02</div>
+            <h3>WhatsApp PDF seals</h3>
+            <p>Tax invoices with shop name, FSSAI, and GSTIN land in the customer’s chat.</p>
+          </article>
+          <article class="feature-lux reveal">
+            <div class="feature-num">03</div>
+            <h3>History vault</h3>
+            <p>Order IDs, resend invoices, Excel &amp; HTML exports for owners and accountants.</p>
+          </article>
+          <article class="feature-lux reveal">
+            <div class="feature-num">04</div>
+            <h3>Triple stage</h3>
+            <p>Android APK, web browser, and Windows desktop — one licensed product family.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <div class="foil-divider foil-divider--compact" aria-hidden="true">
+      <div class="foil-shimmer"></div>
+      <span class="foil-gem-center"></span>
+    </div>
+
+    <section class="gallery" id="gallery">
+      <div class="container">
+        <div class="section-head center reveal">
+          <div class="foil-mini dark" aria-hidden="true">
+            <span class="foil-line"></span>
+            <span class="foil-gem"></span>
+            <span class="foil-line"></span>
+          </div>
+          <span class="eyebrow">Product gallery</span>
+          <h2>Screens from the suite</h2>
+          <p>High-fidelity captures of Billing, Inventory, and Order History.</p>
+        </div>
+
+        <div class="gallery-rail">
+          <figure class="gallery-card reveal">
+            <div class="gallery-frame">
+              <img src="./assets/shot-billing.svg" alt="Billing screen product shot" width="390" height="844" loading="lazy" />
+            </div>
+            <figcaption>
+              <strong>Billing</strong>
+              <span>Menu, search, cart total, checkout</span>
+            </figcaption>
+          </figure>
+          <figure class="gallery-card reveal">
+            <div class="gallery-frame">
+              <img src="./assets/shot-inventory.svg" alt="Inventory screen product shot" width="390" height="844" loading="lazy" />
+            </div>
+            <figcaption>
+              <strong>Inventory</strong>
+              <span>Items, variants, bulk import</span>
+            </figcaption>
+          </figure>
+          <figure class="gallery-card reveal">
+            <div class="gallery-frame">
+              <img src="./assets/shot-history.svg" alt="History screen product shot" width="390" height="844" loading="lazy" />
+            </div>
+            <figcaption>
+              <strong>History</strong>
+              <span>Orders, revenue, WhatsApp status</span>
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <div class="foil-divider foil-divider--compact" aria-hidden="true">
+      <div class="foil-shimmer"></div>
+      <span class="foil-gem-center"></span>
+    </div>
+
+    <section class="pricing" id="pricing">
+      <div class="container">
+        <div class="section-head center reveal">
+          <div class="foil-mini dark" aria-hidden="true">
+            <span class="foil-line"></span>
+            <span class="foil-gem"></span>
+            <span class="foil-line"></span>
+          </div>
+          <span class="eyebrow">Licensing</span>
+          <h2>Keys to the kingdom</h2>
+          <p>Indicative annual plans — confirm rates when you request access.</p>
+        </div>
+        <div class="price-grid">
+          <article class="price-card reveal">
+            <h3>Starter</h3>
+            <p class="price">₹2,999 <small>/ year</small></p>
+            <ul>
+              <li>1 device</li>
+              <li>Billing &amp; history</li>
+              <li>WhatsApp invoices</li>
+            </ul>
+            <a class="btn btn-outline" href="#contact">Request</a>
+          </article>
+          <article class="price-card featured reveal">
+            <span class="badge">Signature</span>
+            <h3>Shop</h3>
+            <p class="price">₹4,999 <small>/ year</small></p>
+            <ul>
+              <li>Up to 3 devices</li>
+              <li>Bulk import &amp; exports</li>
+              <li>Priority setup</li>
+            </ul>
+            <a class="btn btn-gold" href="#contact">Request</a>
+          </article>
+          <article class="price-card reveal">
+            <h3>Business</h3>
+            <p class="price">Custom</p>
+            <ul>
+              <li>Multi-shop keys</li>
+              <li>Desktop rollout</li>
+              <li>Dedicated support</li>
+            </ul>
+            <a class="btn btn-outline" href="#contact">Talk to us</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-band" id="contact">
+      <div class="container cta-grid">
+        <div class="reveal">
+          <div class="foil-mini" aria-hidden="true">
+            <span class="foil-line"></span>
+            <span class="foil-gem"></span>
+            <span class="foil-line"></span>
+          </div>
+          <span class="eyebrow">Private invitation</span>
+          <h2>Bring NAM bill Lux to your counter</h2>
+          <p>Share your shop details — we’ll reply with license options and setup guidance.</p>
+          <a class="btn btn-ghost-lux" href="mailto:hello@nambill.app?subject=NAM%20bill%20Lux%20license">Email hello@nambill.app</a>
+        </div>
+        <form class="lux-form reveal" id="contactForm">
+          <label for="name">Name</label>
+          <input id="name" name="name" required placeholder="Your name" />
+          <label for="shop">Shop</label>
+          <input id="shop" name="shop" required placeholder="Shop name" />
+          <label for="phone">WhatsApp</label>
+          <input id="phone" name="phone" required type="tel" placeholder="10-digit number" />
+          <label for="plan">Plan</label>
+          <select id="plan" name="plan">
+            <option>Starter</option>
+            <option selected>Shop</option>
+            <option>Business</option>
+          </select>
+          <button class="btn btn-gold" type="submit">Request license info</button>
+          <p class="form-status" id="formStatus" role="status"></p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-row">
+      <div class="footer-brand">
+        <img src="./assets/nam-bill-logo.png" width="40" height="40" alt="" />
+        <span>NAM bill Lux</span>
+      </div>
+      <p>© <span id="year"></span> NAM bill · <a href="./index.html">Classic</a> · <a href="./funky.html">Funky</a> · <a href="./newspaper.html">Paper</a> · <a href="./glass.html">Glass</a> · <a href="./kitchen.html">Kitchen</a> · <a href="./bengaluru.html">Bengaluru</a></p>
+    </div>
+  </footer>
+
+  <script src="./js/luxury.js" defer></script>
+</body>
+</html>
