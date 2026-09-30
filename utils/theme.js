@@ -5,51 +5,58 @@ export const GST_RATE = 0.05;
 export const CGST_RATE = 0.025;
 export const SGST_RATE = 0.025;
 
+/**
+ * Soft-minimal accent presets.
+ * - buttonColor / filterSortColor: primary actions & chips
+ * - textColor: emphasis text on light chrome
+ * - headerColor: soft header tint (nav uses this lightly)
+ * - tabBarColor: cart / menu accent chips (not the real tab bar bg)
+ */
 export const THEME_PRESETS = {
   default: {
     id: 'default',
     label: 'Classic',
-    buttonColor: '#e94560',
-    textColor: '#1a1a2e',
-    tabBarColor: '#16213e',
-    filterSortColor: '#e94560',
-    headerColor: '#1a1a2e',
+    buttonColor: '#0F766E',
+    textColor: '#0F172A',
+    tabBarColor: '#0F766E',
+    filterSortColor: '#0D9488',
+    headerColor: '#134E4A',
   },
   ocean: {
     id: 'ocean',
     label: 'Ocean',
-    buttonColor: '#0077b6',
-    textColor: '#023047',
-    tabBarColor: '#03045e',
-    filterSortColor: '#0096c7',
-    headerColor: '#03045e',
+    buttonColor: '#0369A1',
+    textColor: '#0C4A6E',
+    tabBarColor: '#0284C7',
+    filterSortColor: '#0EA5E9',
+    headerColor: '#0C4A6E',
   },
   forest: {
     id: 'forest',
     label: 'Forest',
-    buttonColor: '#2d6a4f',
-    textColor: '#1b4332',
-    tabBarColor: '#081c15',
-    filterSortColor: '#40916c',
-    headerColor: '#081c15',
+    buttonColor: '#3F6212',
+    textColor: '#1A2E05',
+    tabBarColor: '#4D7C0F',
+    filterSortColor: '#65A30D',
+    headerColor: '#365314',
   },
   sunset: {
     id: 'sunset',
     label: 'Sunset',
-    buttonColor: '#e85d04',
-    textColor: '#370617',
-    tabBarColor: '#6a040f',
-    filterSortColor: '#f48c06',
-    headerColor: '#6a040f',
+    buttonColor: '#C2410C',
+    textColor: '#7C2D12',
+    tabBarColor: '#EA580C',
+    filterSortColor: '#F97316',
+    headerColor: '#9A3412',
   },
   purple: {
     id: 'purple',
     label: 'Purple',
-    buttonColor: '#7b2cbf',
-    textColor: '#240046',
-    tabBarColor: '#10002b',
-    filterSortColor: '#9d4edd',
-    headerColor: '#10002b',
+    buttonColor: '#6D28D9',
+    textColor: '#4C1D95',
+    tabBarColor: '#7C3AED',
+    filterSortColor: '#8B5CF6',
+    headerColor: '#5B21B6',
   },
 };
 

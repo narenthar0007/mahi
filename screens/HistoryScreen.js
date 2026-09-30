@@ -9,6 +9,7 @@ import {
   Platform,
   TextInput,
   KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -35,11 +36,16 @@ import {
   endOfDay,
 } from '../utils/orderExport';
 import SalesStatsModal from '../components/SalesStatsModal';
+import MarketingModal from '../components/MarketingModal';
 import EditOrderModal from '../components/EditOrderModal';
+import AppEmptyState from '../components/ui/AppEmptyState';
+import AppChip from '../components/ui/AppChip';
 import {
   TABLE_COLORS,
   getTableOrderHistoryStyle,
   isRunningTableOrder,
+  filterOrdersByTableScope,
+  getActiveTablesForOrderFilter,
 } from '../utils/tableManagement';
 
 const formatDateTime = (isoString) => {
@@ -91,6 +97,8 @@ function getPresetRange(presetId) {
 export default function HistoryScreen() {
   const { ui, styles } = useThemedStyles(createStyles);
   const history = useStore((s) => s.history);
+  const tables = useStore((s) => s.tables);
+  const enableTables = useStore((s) => s.enableTables);
   const shopName = useStore((s) => s.shopName);
   const updateOrderCustomerPhone = useStore((s) => s.updateOrderCustomerPhone);
   const updateOrderItems = useStore((s) => s.updateOrderItems);
@@ -113,12 +121,36 @@ export default function HistoryScreen() {
   const [editingOrderKey, setEditingOrderKey] = useState(null);
   const [editingPhone, setEditingPhone] = useState('');
   const [statsVisible, setStatsVisible] = useState(false);
+  const [marketingVisible, setMarketingVisible] = useState(false);
   const [menuOrder, setMenuOrder] = useState(null);
   const [editOrder, setEditOrder] = useState(null);
+  const [orderScope, setOrderScope] = useState('all');
+  const [selectedTableId, setSelectedTableId] = useState(null);
 
   const sortedHistory = useMemo(
     () => [...history].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)),
     [history]
+  );
+
+  const activeFilterTables = useMemo(
+    () => getActiveTablesForOrderFilter(tables, history),
+    [tables, history]
+  );
+
+  const tableFilterChips = useMemo(() => {
+    if (activeFilterTables.length > 0) return activeFilterTables;
+    return [...(Array.isArray(tables) ? tables : [])].sort((a, b) =>
+      String(a.number).localeCompare(String(b.number), undefined, { numeric: true })
+    );
+  }, [activeFilterTables, tables]);
+
+  const filteredOrders = useMemo(
+    () =>
+      filterOrdersByTableScope(sortedHistory, {
+        scope: orderScope,
+        tableId: selectedTableId,
+      }),
+    [sortedHistory, orderScope, selectedTableId]
   );
 
   const filteredForExport = useMemo(
@@ -170,7 +202,7 @@ export default function HistoryScreen() {
     }
   };
 
-  const handleExport = async () => {
+  const handleExportPdf = useCallback(async () => {
     if (fromDate > toDate) {
       Alert.alert(t('invalidRange'), t('invalidRangeMsg'));
       return;
@@ -187,7 +219,7 @@ export default function HistoryScreen() {
         shopName,
         fromDate,
         toDate,
-        format: Platform.OS === 'web' ? 'html' : 'pdf',
+        format: 'pdf',
       });
     } catch (error) {
       if (error?.message === 'sharing_unavailable') {
@@ -196,63 +228,76 @@ export default function HistoryScreen() {
         Alert.alert(t('exportFailed'), t('exportTableFailed'));
       }
     }
-  };
+  }, [fromDate, toDate, filteredForExport, shopName, t]);
 
-  const handleExportCsv = async () => {
-    if (fromDate > toDate) {
-      Alert.alert(t('invalidRange'), t('invalidRangeMsg'));
-      return;
-    }
-
-    if (filteredForExport.length === 0) {
-      Alert.alert(t('noOrders'), t('noOrdersMsg'));
-      return;
-    }
-
-    try {
-      await shareOrderExport({
-        orders: filteredForExport,
-        shopName,
-        fromDate,
-        toDate,
-        format: 'csv',
-      });
-    } catch (error) {
-      if (error?.message === 'sharing_unavailable') {
-        Alert.alert(t('exportFailed'), t('sharingUnavailable'));
-      } else {
-        Alert.alert(t('exportFailed'), t('exportCsvFailed'));
-      }
-    }
-  };
-
-  const renderExportPanel = () => (
+  const exportPanel = useMemo(
+    () => (
     <View style={styles.exportPanel}>
-      <Text style={styles.exportTitle}>{t('exportOrders')}</Text>
+      <View style={styles.exportHeaderRow}>
+        <Text style={styles.exportTitle} numberOfLines={1}>
+          {t('exportOrders')}
+        </Text>
+
+        <View style={styles.exportHeaderActions}>
+          <TouchableOpacity
+            style={[
+              styles.headerActionBtn,
+              styles.headerActionBtnSecondary,
+              { borderColor: theme.filterSortColor },
+            ]}
+            onPress={() => setStatsVisible(true)}
+            activeOpacity={0.85}
+          >
+            <Text
+              style={[styles.headerActionText, { color: theme.filterSortColor }]}
+              numberOfLines={1}
+            >
+              {t('viewStatistics')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.headerActionBtn,
+              styles.headerActionBtnSecondary,
+              { borderColor: theme.filterSortColor },
+            ]}
+            onPress={() => setMarketingVisible(true)}
+            activeOpacity={0.85}
+          >
+            <Text
+              style={[styles.headerActionText, { color: theme.filterSortColor }]}
+              numberOfLines={1}
+            >
+              {t('marketingTitle')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.headerActionBtn,
+              { backgroundColor: theme.buttonColor },
+            ]}
+            onPress={handleExportPdf}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.headerActionTextPrimary} numberOfLines={1}>
+              {t('exportPdf')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <View style={styles.presetRow}>
         {datePresets.map((preset) => (
-          <TouchableOpacity
+          <AppChip
             key={preset.id}
-            style={[
-              styles.presetBtn,
-              activePreset === preset.id && {
-                backgroundColor: `${theme.filterSortColor}18`,
-                borderWidth: 1,
-                borderColor: theme.filterSortColor,
-              },
-            ]}
+            label={preset.label}
+            selected={activePreset === preset.id}
             onPress={() => applyPreset(preset.id)}
-          >
-            <Text
-              style={[
-                styles.presetText,
-                activePreset === preset.id && { color: theme.filterSortColor },
-              ]}
-            >
-              {preset.label}
-            </Text>
-          </TouchableOpacity>
+            color={theme.filterSortColor}
+            style={styles.presetChip}
+          />
         ))}
       </View>
 
@@ -310,31 +355,89 @@ export default function HistoryScreen() {
         </TouchableOpacity>
       )}
 
+      {enableTables !== false || sortedHistory.some((order) => order?.isTableOrder || order?.tableId) ? (
+        <View style={styles.orderFilterBlock}>
+          <View style={styles.orderFilterRow}>
+            {[
+              { id: 'all', label: t('orderFilterAll') },
+              { id: 'table', label: t('orderFilterTable') },
+              { id: 'noTable', label: t('orderFilterNoTable') },
+            ].map((option) => (
+              <AppChip
+                key={option.id}
+                label={option.label}
+                selected={orderScope === option.id && !selectedTableId}
+                onPress={() => {
+                  setOrderScope(option.id);
+                  setSelectedTableId(null);
+                }}
+                color={theme.filterSortColor}
+                style={styles.orderFilterChip}
+              />
+            ))}
+          </View>
+          {enableTables !== false && tableFilterChips.length > 0 ? (
+            <>
+              <Text style={styles.orderFilterLabel}>
+                {activeFilterTables.length > 0 ? t('orderFilterActiveTables') : t('tables')}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.activeTableRow}
+              >
+                {tableFilterChips.map((table) => (
+                  <AppChip
+                    key={table.id}
+                    label={table.number}
+                    selected={selectedTableId === table.id}
+                    onPress={() => {
+                      setSelectedTableId((current) => {
+                        if (current === table.id) return null;
+                        return table.id;
+                      });
+                      setOrderScope('table');
+                    }}
+                    color={TABLE_COLORS.historyTableOrder.swatch}
+                    style={styles.activeTableChip}
+                  />
+                ))}
+              </ScrollView>
+            </>
+          ) : null}
+        </View>
+      ) : null}
+
       <Text style={styles.exportMeta}>
         {t('exportMeta', {
           count: exportSummary.orderCount,
           total: formatCurrency(exportSummary.totalRevenue),
         })}
       </Text>
-
-      <TouchableOpacity
-        style={[styles.statsBtn, { borderColor: theme.filterSortColor }]}
-        onPress={() => setStatsVisible(true)}
-      >
-        <Text style={[styles.statsBtnText, { color: theme.filterSortColor }]}>
-          {t('viewSalesStats')}
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={[styles.exportBtn, { backgroundColor: theme.headerColor }]} onPress={handleExport}>
-        <Text style={styles.exportBtnText}>
-          {t(Platform.OS === 'web' ? 'exportTableHtml' : 'exportTablePdf')}
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.exportCsvBtn} onPress={handleExportCsv}>
-        <Text style={styles.exportCsvText}>{t('exportCsvExcel')}</Text>
-      </TouchableOpacity>
     </View>
+    ),
+    [
+      styles,
+      t,
+      theme.filterSortColor,
+      theme.buttonColor,
+      datePresets,
+      activePreset,
+      fromDate,
+      toDate,
+      pickerMode,
+      exportSummary,
+      handleExportPdf,
+      applyPreset,
+      handleWebDateChange,
+      handleDateChange,
+      enableTables,
+      sortedHistory,
+      orderScope,
+      selectedTableId,
+      activeFilterTables,
+      tableFilterChips,
+    ]
   );
 
   const handleOrderReady = (order) => {
@@ -427,9 +530,11 @@ export default function HistoryScreen() {
     setEditOrder(order);
   };
 
-  const handleSaveEditedOrder = (nextItems) => {
+  const handleSaveEditedOrder = (nextItems, nextOrderNote) => {
     if (!editOrder) return;
-    const result = updateOrderItems(editOrder.id, nextItems);
+    const result = updateOrderItems(editOrder.id, nextItems, {
+      orderNote: nextOrderNote,
+    });
     if (!result?.success) {
       if (result?.error === 'paid_locked') {
         showAlert(t('editOrderLockedTitle'), t('editOrderLockedMsg'));
@@ -619,7 +724,7 @@ export default function HistoryScreen() {
               onChangeText={(value) => setEditingPhone(sanitizeCustomerPhoneInput(value))}
               placeholder={t('customerWhatsAppNo')}
               keyboardType="phone-pad"
-              placeholderTextColor="#adb5bd"
+              placeholderTextColor={ui.textMuted}
               maxLength={CUSTOMER_PHONE_MAX_LENGTH}
             />
             <View style={styles.phoneEditActions}>
@@ -636,14 +741,20 @@ export default function HistoryScreen() {
           </View>
         ) : null}
 
+        {item.orderNote ? (
+          <Text style={styles.orderNoteLine} numberOfLines={2}>
+            {t('orderNote')}: {item.orderNote}
+          </Text>
+        ) : null}
         <View style={styles.itemList}>
           {(item.items || []).map((line) => (
-            <Text key={line.id} style={styles.lineItem} numberOfLines={1}>
+            <Text key={line.id} style={styles.lineItem} numberOfLines={2}>
               · {line.name}
               {line.selectedVariant ? ` (${line.selectedVariant.name})` : ''}
               {(line.selectedAddons?.length ?? 0) > 0
                 ? ` + ${line.selectedAddons.map((a) => a.name).join(', ')}`
-                : ''}{' '}
+                : ''}
+              {line.note ? ` — ${line.note}` : ''}{' '}
               — {formatCurrency(line.totalPrice)}
             </Text>
           ))}
@@ -666,6 +777,7 @@ export default function HistoryScreen() {
           isTableOrder={item.isTableOrder}
           tableNumber={item.tableNumber}
           isPaid={item.isPaid}
+          orderNote={item.orderNote || ''}
           compact
         />
       </View>
@@ -688,32 +800,21 @@ export default function HistoryScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <FlatList
-          data={sortedHistory}
+          data={filteredOrders}
           keyExtractor={(item) => item.id}
           renderItem={renderOrder}
-          ListHeaderComponent={renderExportPanel}
+          ListHeaderComponent={exportPanel}
           ListEmptyComponent={
-            <View style={styles.emptyList}>
-              <Text style={styles.emptyTitle}>{t('noOrdersYet')}</Text>
-              <Text style={styles.emptySub}>{t('noOrdersYetSub')}</Text>
-            </View>
+            <AppEmptyState
+              icon="receipt-outline"
+              title={sortedHistory.length ? t('orderFilterNoMatch') : t('noOrdersYet')}
+              subtitle={sortedHistory.length ? t('orderFilterNoMatchSub') : t('noOrdersYetSub')}
+            />
           }
           contentContainerStyle={listContentStyle}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-        />
-        <SalesStatsModal
-          visible={statsVisible}
-          onClose={() => setStatsVisible(false)}
-          orders={sortedHistory}
-          shopName={shopName}
-        />
-        <EditOrderModal
-          visible={Boolean(editOrder)}
-          order={editOrder}
-          onClose={() => setEditOrder(null)}
-          onSave={handleSaveEditedOrder}
         />
         {menuOrder ? (
           <View style={styles.menuOverlay}>
@@ -746,6 +847,26 @@ export default function HistoryScreen() {
           </View>
         ) : null}
       </KeyboardAvoidingView>
+
+      {statsVisible ? (
+        <SalesStatsModal
+          visible
+          onClose={() => setStatsVisible(false)}
+          orders={sortedHistory}
+          shopName={shopName}
+        />
+      ) : null}
+      {marketingVisible ? (
+        <MarketingModal visible onClose={() => setMarketingVisible(false)} />
+      ) : null}
+      {editOrder ? (
+        <EditOrderModal
+          visible
+          order={editOrder}
+          onClose={() => setEditOrder(null)}
+          onSave={handleSaveEditedOrder}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -760,39 +881,88 @@ function createStyles(ui) {
     padding: 20,
     marginBottom: 16,
   },
+  exportHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 14,
+  },
   exportTitle: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     fontSize: 18,
     fontWeight: '700',
     color: ui.textPrimary,
     letterSpacing: -0.3,
-    marginBottom: 14,
+  },
+  exportHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    flexShrink: 0,
+    maxWidth: '72%',
+    justifyContent: 'flex-end',
+  },
+  headerActionBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: ui.radiusMd,
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: 120,
+  },
+  headerActionBtnSecondary: {
+    backgroundColor: ui.surface,
+    borderWidth: 1.5,
+  },
+  headerActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  headerActionTextPrimary: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
   },
   presetRow: {
     flexDirection: 'row',
     gap: 8,
     marginBottom: 12,
   },
-  presetBtn: {
+  presetChip: {
     flex: 1,
-    paddingVertical: 9,
-    borderRadius: ui.radiusFull,
-    backgroundColor: ui.surfaceMuted,
+  },
+  orderFilterBlock: {
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  orderFilterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  orderFilterChip: {
+    flexGrow: 0,
+  },
+  orderFilterLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: ui.textMuted,
+    marginBottom: 8,
+    letterSpacing: 0.2,
+  },
+  activeTableRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'transparent',
+    gap: 8,
+    paddingRight: 8,
   },
-  presetBtnActive: {
-    backgroundColor: '#fff0f3',
-    borderWidth: 1,
-    borderColor: '#e94560',
-  },
-  presetText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#868e96',
-  },
-  presetTextActive: {
-    color: '#e94560',
+  activeTableChip: {
+    flexGrow: 0,
   },
   dateRow: {
     flexDirection: 'row',
@@ -810,7 +980,7 @@ function createStyles(ui) {
   },
   dateLabel: {
     fontSize: 11,
-    color: '#868e96',
+    color: ui.textMuted,
     fontWeight: '600',
     marginBottom: 4,
   },
@@ -828,7 +998,7 @@ function createStyles(ui) {
   },
   dateArrow: {
     fontSize: 16,
-    color: '#adb5bd',
+    color: ui.textMuted,
   },
   donePickerBtn: {
     alignSelf: 'flex-end',
@@ -840,45 +1010,8 @@ function createStyles(ui) {
   },
   exportMeta: {
     fontSize: 13,
-    color: '#868e96',
-    marginBottom: 12,
-  },
-  statsBtn: {
-    backgroundColor: ui.surface,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginBottom: 8,
-    borderWidth: 1.5,
-  },
-  statsBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  exportBtn: {
-    backgroundColor: ui.textPrimary,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  exportBtnText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  exportCsvBtn: {
-    backgroundColor: '#f1f3f5',
-    paddingVertical: 11,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: ui.border,
-  },
-  exportCsvText: {
-    color: '#495057',
-    fontSize: 14,
-    fontWeight: '600',
+    color: ui.textMuted,
+    marginBottom: 4,
   },
   card: {
     ...cardStyle(ui),
@@ -898,33 +1031,33 @@ function createStyles(ui) {
   date: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#495057',
+    color: ui.textSecondary,
   },
   editedBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(253, 126, 20, 0.16)',
-    borderColor: 'rgba(253, 126, 20, 0.45)',
+    backgroundColor: ui.warningBg,
+    borderColor: ui.warning,
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   editedBadgeText: {
-    color: '#e8590c',
+    color: ui.warning,
     fontSize: 11,
     fontWeight: '800',
   },
   wrongBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(220, 38, 38, 0.14)',
-    borderColor: 'rgba(220, 38, 38, 0.4)',
+    backgroundColor: ui.dangerBg,
+    borderColor: ui.danger,
     borderWidth: 1,
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   wrongBadgeText: {
-    color: '#dc2626',
+    color: ui.danger,
     fontSize: 11,
     fontWeight: '800',
   },
@@ -956,7 +1089,7 @@ function createStyles(ui) {
   amount: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#e94560',
+    color: ui.textPrimary,
   },
   amountRow: {
     flexDirection: 'row',
@@ -967,7 +1100,7 @@ function createStyles(ui) {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#f1f3f5',
+    backgroundColor: ui.surfaceMuted,
     borderWidth: 1,
     borderColor: ui.border,
     alignItems: 'center',
@@ -976,7 +1109,7 @@ function createStyles(ui) {
   menuBtnText: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#495057',
+    color: ui.textSecondary,
     marginTop: -4,
   },
   totalBox: {
@@ -989,7 +1122,7 @@ function createStyles(ui) {
     alignItems: 'center',
   },
   paidBtn: {
-    backgroundColor: '#f1f3f5',
+    backgroundColor: ui.surfaceMuted,
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 8,
@@ -997,40 +1130,40 @@ function createStyles(ui) {
     borderColor: ui.border,
   },
   paidBtnActive: {
-    backgroundColor: 'rgba(40, 167, 69, 0.2)',
-    borderColor: 'rgba(40, 167, 69, 0.5)',
+    backgroundColor: ui.successBg,
+    borderColor: ui.success,
   },
   paidBtnLocked: {
     opacity: 0.95,
   },
   paidBtnText: {
-    color: '#495057',
+    color: ui.textSecondary,
     fontSize: 13,
     fontWeight: '800',
   },
   paidBtnTextActive: {
-    color: '#2b8a3e',
+    color: ui.success,
   },
   wrongBtn: {
-    backgroundColor: '#fef2f2',
+    backgroundColor: ui.dangerBg,
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(220, 38, 38, 0.35)',
+    borderColor: ui.danger,
     alignSelf: 'flex-end',
   },
   wrongBtnActive: {
-    backgroundColor: 'rgba(220, 38, 38, 0.16)',
-    borderColor: 'rgba(220, 38, 38, 0.5)',
+    backgroundColor: ui.dangerBg,
+    borderColor: ui.danger,
   },
   wrongBtnText: {
-    color: '#dc2626',
+    color: ui.danger,
     fontSize: 12,
     fontWeight: '800',
   },
   wrongBtnTextActive: {
-    color: '#b91c1c',
+    color: ui.danger,
   },
   menuOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -1051,7 +1184,7 @@ function createStyles(ui) {
   menuTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#868e96',
+    color: ui.textMuted,
     marginBottom: 12,
   },
   menuItem: {
@@ -1072,12 +1205,12 @@ function createStyles(ui) {
     color: ui.textPrimary,
   },
   menuItemTextDisabled: {
-    color: '#868e96',
+    color: ui.textMuted,
   },
   menuItemHint: {
     marginTop: 4,
     fontSize: 12,
-    color: '#868e96',
+    color: ui.textMuted,
     fontWeight: '600',
   },
   menuCancel: {
@@ -1087,11 +1220,11 @@ function createStyles(ui) {
   menuCancelText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#495057',
+    color: ui.textSecondary,
   },
   taxNote: {
     fontSize: 12,
-    color: '#868e96',
+    color: ui.textMuted,
     marginTop: 6,
     fontWeight: '600',
   },
@@ -1112,7 +1245,7 @@ function createStyles(ui) {
   },
   itemCount: {
     fontSize: 13,
-    color: '#868e96',
+    color: ui.textMuted,
     marginTop: 6,
     marginBottom: 10,
   },
@@ -1152,7 +1285,7 @@ function createStyles(ui) {
   },
   phoneCancelBtn: {
     flex: 1,
-    backgroundColor: '#f1f3f5',
+    backgroundColor: ui.surfaceMuted,
     borderWidth: 1,
     borderColor: ui.border,
     borderRadius: 10,
@@ -1160,7 +1293,7 @@ function createStyles(ui) {
     alignItems: 'center',
   },
   phoneCancelText: {
-    color: '#495057',
+    color: ui.textSecondary,
     fontWeight: '700',
   },
   phoneSaveBtn: {
@@ -1175,37 +1308,25 @@ function createStyles(ui) {
   },
   orderId: {
     fontSize: 12,
-    color: '#868e96',
+    color: ui.textMuted,
     marginTop: 6,
     fontWeight: '700',
   },
   itemList: {
     borderTopWidth: 1,
-    borderTopColor: '#f1f3f5',
+    borderTopColor: ui.surfaceMuted,
     paddingTop: 10,
+  },
+  orderNoteLine: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: ui.textSecondary,
+    marginBottom: 8,
   },
   lineItem: {
     fontSize: 13,
-    color: '#6c757d',
+    color: ui.textSecondary,
     marginBottom: 4,
-  },
-  emptyList: {
-    alignItems: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 24,
-    marginTop: 12,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: ui.textPrimary,
-  },
-  emptySub: {
-    fontSize: 14,
-    color: '#868e96',
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 20,
   },
 };
 }

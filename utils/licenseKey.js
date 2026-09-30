@@ -161,6 +161,22 @@ export function validateLicenseKey(key, secret = LICENSE_SECRET) {
   return { valid: true, expiryMs: expiryMsV1 };
 }
 
+export function getLicenseAccess(key, nowMs = Date.now()) {
+  const result = validateLicenseKey(String(key || ''));
+  const expiryMs = result.expiryMs || null;
+  if (!result.valid) {
+    return {
+      allowed: false,
+      reason: result.reason || 'invalid_key',
+      expiryMs,
+    };
+  }
+  if (expiryMs && nowMs > expiryMs) {
+    return { allowed: false, reason: 'expired', expiryMs };
+  }
+  return { allowed: true, reason: null, expiryMs, format: result.format };
+}
+
 export function formatExpiryDate(expiryMs) {
   return new Date(expiryMs).toLocaleDateString(undefined, {
     year: 'numeric',

@@ -9,6 +9,7 @@ import {
   getWsUrl,
   parseQrPayload,
 } from './protocol';
+import { wrapSyncMessage, unwrapSyncMessage } from '../secureCrypto';
 
 function getElectronSync() {
   if (typeof window !== 'undefined' && window.electronSync?.isElectron) {
@@ -52,6 +53,17 @@ class DeviceSyncManager {
     this.getStore = null;
     this.unsubscribeStore = null;
     this.pushTimer = null;
+  }
+
+  protect(message) {
+    if (!this.token || !message) return message;
+    return wrapSyncMessage(message, this.token);
+  }
+
+  reveal(message) {
+    if (!message) return message;
+    if (!this.token) return message;
+    return unwrapSyncMessage(message, this.token);
   }
 
   setStoreAccessor(getStore) {
@@ -154,7 +166,7 @@ class DeviceSyncManager {
           this.emit();
         },
         onMessage: (client, message) => {
-          this.handleServerMessage(client.id, message, (msg) => client.send(msg));
+          this.handleServerMessage(client.id, this.reveal(message), (msg) => client.send(this.protect(msg)));
         },
       });
     } else {
@@ -199,8 +211,8 @@ class DeviceSyncManager {
       this.emit();
     } else if (payload.type === 'message') {
       const electron = getElectronSync();
-      this.handleServerMessage(payload.clientId, payload.message, (msg) => {
-        electron?.send(payload.clientId, msg);
+      this.handleServerMessage(payload.clientId, this.reveal(payload.message), (msg) => {
+        electron?.send(payload.clientId, this.protect(msg));
       });
     }
   }
@@ -271,13 +283,14 @@ class DeviceSyncManager {
   }
 
   serverBroadcast(message, exceptClientId = null) {
+    const payload = this.protect(message);
     const electron = getElectronSync();
     if (this.server?.type === 'electron' && electron) {
-      electron.broadcast(message, exceptClientId);
+      electron.broadcast(payload, exceptClientId);
       return;
     }
     if (this.server?.broadcast) {
-      this.server.broadcast(message, exceptClientId);
+      this.server.broadcast(payload, exceptClientId);
     }
   }
 
@@ -314,22 +327,23 @@ class DeviceSyncManager {
 
       socket.onopen = () => {
         socket.send(
-          JSON.stringify({
+          JSON.stringify(this.protect({
             type: MSG.HELLO,
             token: this.token,
             deviceId: this.deviceId,
             deviceName: this.deviceName,
-          })
+          }))
         );
       };
 
       socket.onmessage = (event) => {
         let msg;
         try {
-          msg = JSON.parse(String(event.data));
+          msg = this.reveal(JSON.parse(String(event.data)));
         } catch {
           return;
         }
+        if (!msg) return;
         if (msg.type === MSG.ERROR) {
           fail(new Error(msg.error || 'sync_error'));
           return;
@@ -459,12 +473,12 @@ class DeviceSyncManager {
 
     if (this.role === 'child' && this.socket?.readyState === 1) {
       this.socket.send(
-        JSON.stringify({
+        JSON.stringify(this.protect({
           type: MSG.PUSH,
           token: this.token,
           deviceId: this.deviceId,
           snapshot: data,
-        })
+        }))
       );
     }
   }

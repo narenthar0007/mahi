@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,15 @@ import {
   Pressable,
   Platform,
   KeyboardAvoidingView,
+  Dimensions,
 } from 'react-native';
+import * as Speech from 'expo-speech';
 import useStore from '../store/store';
 import { showAlert } from '../utils/alert';
 import { useTranslation } from '../utils/i18n';
 import { useLayoutInsets } from '../hooks/useLayoutInsets';
-import { UI } from '../utils/uiTheme';
-import { getUI } from '../utils/uiTheme';
+import { getUI, UI } from '../utils/uiTheme';
+import { useAppTheme } from '../utils/theme';
 import {
   TABLE_COLORS,
   formatTableCapacityLabel,
@@ -31,15 +33,37 @@ import {
 } from '../utils/waitlist';
 import { sendViaWhatsApp } from '../utils/billShare';
 
-function announceTableReady(message) {
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-    const utterance = new window.SpeechSynthesisUtterance(message);
-    utterance.rate = 0.9;
-    window.speechSynthesis.speak(utterance);
-    return true;
+async function announceTableReady(message) {
+  const text = String(message || '').trim();
+  if (!text) return false;
+
+  try {
+    const speaking = await Speech.isSpeakingAsync();
+    if (speaking) {
+      await Speech.stop();
+    }
+  } catch {
+    // ignore stop failures
   }
-  return false;
+
+  try {
+    Speech.speak(text, {
+      rate: 0.95,
+      pitch: 1,
+      language: 'en-IN',
+    });
+    return true;
+  } catch {
+    // Fallback for web if expo-speech fails.
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const utterance = new window.SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      window.speechSynthesis.speak(utterance);
+      return true;
+    }
+    return false;
+  }
 }
 
 function sortTables(list) {
@@ -56,7 +80,7 @@ function getFloorStyle(kind) {
 
 export default function TableBookerModal({ visible, onClose, onSeated, onStartOrder }) {
   const { t } = useTranslation();
-  const { bottom: bottomInset } = useLayoutInsets();
+  const { top: topInset, bottom: bottomInset } = useLayoutInsets();
   const waitlist = useStore((s) => s.waitlist);
   const tables = useStore((s) => s.tables);
   const appearanceMode = useStore((s) => s.appearanceMode);
@@ -72,8 +96,24 @@ export default function TableBookerModal({ visible, onClose, onSeated, onStartOr
   const [filterParty, setFilterParty] = useState(null);
   const [filterInput, setFilterInput] = useState('');
   const [seatingCustomer, setSeatingCustomer] = useState(null);
+  const [scrollAreaHeight, setScrollAreaHeight] = useState(0);
+  const fallbackScrollHeight = useMemo(() => {
+    const windowHeight = Dimensions.get('window').height;
+    return Math.max(280, Math.round(windowHeight - topInset - bottomInset - 160));
+  }, [topInset, bottomInset, visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      setScrollAreaHeight(0);
+      return undefined;
+    }
+    return () => {
+      Speech.stop().catch(() => {});
+    };
+  }, [visible]);
 
   const isDark = appearanceMode === 'dark';
+  const theme = useAppTheme();
   const c = useMemo(() => {
     const ui = getUI(isDark ? 'dark' : 'light');
     return {
@@ -86,16 +126,16 @@ export default function TableBookerModal({ visible, onClose, onSeated, onStartOr
       textPrimary: ui.textPrimary,
       textSecondary: ui.textSecondary,
       textMuted: ui.textMuted,
-      accent: isDark ? '#38bdf8' : '#1a1a2e',
-      accentText: isDark ? '#0f172a' : '#ffffff',
+      accent: theme.buttonColor,
+      accentText: '#ffffff',
       link: ui.info,
       success: ui.success,
-      warn: '#fbbf24',
-      chipActive: '#f97316',
-      queueAccent: isDark ? '#38bdf8' : '#1a1a2e',
+      warn: ui.warning,
+      chipActive: theme.filterSortColor,
+      queueAccent: theme.buttonColor,
       seatBackdrop: ui.overlay,
     };
-  }, [isDark]);
+  }, [isDark, theme.buttonColor, theme.filterSortColor]);
 
   const partySizes = useMemo(() => getUniquePartySizes(waitlist), [waitlist]);
   const filteredQueue = useMemo(
@@ -184,9 +224,9 @@ export default function TableBookerModal({ visible, onClose, onSeated, onStartOr
     sendViaWhatsApp(message, customer.phone);
   };
 
-  const handleAnnounce = (customer) => {
+  const handleAnnounce = async (customer) => {
     const message = buildTableReadyAnnounceMessage(customer);
-    const spoken = announceTableReady(message);
+    const spoken = await announceTableReady(message);
     if (!spoken) {
       showAlert(t('waitlistAnnounceTitle'), message);
     }
@@ -238,18 +278,25 @@ export default function TableBookerModal({ visible, onClose, onSeated, onStartOr
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={handleClose}
+    >
       <KeyboardAvoidingView
-        style={[styles.overlay, { backgroundColor: c.overlay }]}
+        style={[
+          styles.page,
+          {
+            backgroundColor: c.sheet,
+            paddingTop: topInset,
+            paddingBottom: Math.max(bottomInset, 16),
+          },
+        ]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        enabled={Platform.OS === 'ios'}
       >
-        <Pressable style={styles.backdrop} onPress={handleClose} />
-        <View
-          style={[
-            styles.sheet,
-            { backgroundColor: c.sheet, paddingBottom: Math.max(bottomInset, 16) },
-          ]}
-        >
+        <View style={styles.body}>
           <View style={[styles.header, { borderBottomColor: c.border }]}>
             <View style={styles.headerCopy}>
               <Text style={[styles.title, { color: c.textPrimary }]}>{t('tableBooker')}</Text>
@@ -298,10 +345,30 @@ export default function TableBookerModal({ visible, onClose, onSeated, onStartOr
             </View>
           </View>
 
+          <View
+            style={styles.scrollArea}
+            onLayout={(event) => {
+              const next = Math.round(event.nativeEvent.layout.height);
+              if (next > 0 && next !== scrollAreaHeight) {
+                setScrollAreaHeight(next);
+              }
+            }}
+          >
           <ScrollView
+            style={[
+              styles.scroll,
+              {
+                height:
+                  scrollAreaHeight > 0
+                    ? scrollAreaHeight
+                    : fallbackScrollHeight,
+              },
+            ]}
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator
+            nestedScrollEnabled
+            bounces
           >
             <View
               style={[
@@ -578,6 +645,7 @@ export default function TableBookerModal({ visible, onClose, onSeated, onStartOr
               ))
             )}
           </ScrollView>
+          </View>
 
           {seatingCustomer ? (
             <View style={styles.seatOverlay}>
@@ -597,53 +665,64 @@ export default function TableBookerModal({ visible, onClose, onSeated, onStartOr
                     {t('waitlistNoAvailableTable')}
                   </Text>
                 ) : null}
-                <ScrollView style={styles.seatScroll} nestedScrollEnabled>
-                  <View style={styles.seatGrid}>
-                    {seatingOptions.map(({ table, kind, fits }) => {
-                      const colors = getFloorStyle(kind);
-                      const label = fits
-                        ? t('waitlistFloorFits')
-                        : kind === 'available'
-                          ? t('waitlistFloorTooSmall')
-                          : kind === 'seated'
-                            ? t('waitlistFloorSeatedLabel')
-                            : t('waitlistFloorBusyLabel');
-                      return (
-                        <TouchableOpacity
-                          key={table.id}
-                          disabled={!fits}
-                          style={[
-                            styles.seatTableCard,
-                            {
-                              backgroundColor: colors.backgroundColor,
-                              borderColor: colors.borderColor,
-                              opacity: fits ? 1 : 0.55,
-                            },
-                          ]}
-                          onPress={() => handleConfirmSeat(table)}
-                        >
-                          <Text style={[styles.seatTableNumber, { color: c.textPrimary }]}>
-                            {table.number}
-                          </Text>
-                          <Text style={[styles.seatTableMeta, { color: c.textSecondary }]}>
-                            {formatTableCapacityLabel(table, t)}
-                          </Text>
-                          <Text style={[styles.seatTableStatus, { color: colors.swatch }]}>
-                            {label}
-                          </Text>
-                          {table.guestName ? (
-                            <Text
-                              style={[styles.seatTableGuest, { color: c.textPrimary }]}
-                              numberOfLines={1}
-                            >
-                              {table.guestName}
+                <View style={styles.seatScrollWrap}>
+                  <ScrollView
+                    style={[
+                      styles.seatScroll,
+                      Platform.OS === 'web' ? styles.seatScrollWeb : null,
+                    ]}
+                    contentContainerStyle={styles.seatScrollContent}
+                    nestedScrollEnabled
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator
+                  >
+                    <View style={styles.seatGrid}>
+                      {seatingOptions.map(({ table, kind, fits }) => {
+                        const colors = getFloorStyle(kind);
+                        const label = fits
+                          ? t('waitlistFloorFits')
+                          : kind === 'available'
+                            ? t('waitlistFloorTooSmall')
+                            : kind === 'seated'
+                              ? t('waitlistFloorSeatedLabel')
+                              : t('waitlistFloorBusyLabel');
+                        return (
+                          <TouchableOpacity
+                            key={table.id}
+                            disabled={!fits}
+                            style={[
+                              styles.seatTableCard,
+                              {
+                                backgroundColor: colors.backgroundColor,
+                                borderColor: colors.borderColor,
+                                opacity: fits ? 1 : 0.55,
+                              },
+                            ]}
+                            onPress={() => handleConfirmSeat(table)}
+                          >
+                            <Text style={[styles.seatTableNumber, { color: c.textPrimary }]}>
+                              {table.number}
                             </Text>
-                          ) : null}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
+                            <Text style={[styles.seatTableMeta, { color: c.textSecondary }]}>
+                              {formatTableCapacityLabel(table, t)}
+                            </Text>
+                            <Text style={[styles.seatTableStatus, { color: colors.swatch }]}>
+                              {label}
+                            </Text>
+                            {table.guestName ? (
+                              <Text
+                                style={[styles.seatTableGuest, { color: c.textPrimary }]}
+                                numberOfLines={1}
+                              >
+                                {table.guestName}
+                              </Text>
+                            ) : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                </View>
                 <TouchableOpacity
                   style={styles.seatCancel}
                   onPress={() => setSeatingCustomer(null)}
@@ -662,20 +741,31 @@ export default function TableBookerModal({ visible, onClose, onSeated, onStartOr
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  page: {
     flex: 1,
-    justifyContent: 'flex-end',
+    minHeight: 0,
+    ...(Platform.OS === 'web'
+      ? { height: '100%', maxHeight: '100%' }
+      : {}),
   },
-  backdrop: { ...StyleSheet.absoluteFillObject },
-  sheet: {
-    maxHeight: '92%',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 16,
+  body: {
+    flex: 1,
+    minHeight: 0,
     overflow: 'hidden',
+  },
+  scrollArea: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+  },
+  scroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    ...(Platform.OS === 'web' ? { overflow: 'auto' } : {}),
   },
   header: {
     paddingHorizontal: 18,
+    paddingTop: 12,
     paddingBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -934,8 +1024,11 @@ const styles = StyleSheet.create({
   seatSheet: {
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
-    padding: 18,
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 8,
     gap: 10,
+    maxHeight: '78%',
   },
   seatTitle: {
     fontSize: 17,
@@ -949,8 +1042,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     paddingVertical: 12,
   },
+  seatScrollWrap: {
+    maxHeight: 340,
+    minHeight: 120,
+  },
   seatScroll: {
-    maxHeight: 280,
+    flexGrow: 0,
+  },
+  seatScrollWeb: {
+    maxHeight: 340,
+    overflow: 'auto',
+  },
+  seatScrollContent: {
+    paddingBottom: 8,
   },
   seatGrid: {
     flexDirection: 'row',

@@ -57,7 +57,8 @@ function sameConfig(a, b) {
     String(a?.itemId) === String(b?.itemId) &&
     av === bv &&
     aa === ba &&
-    Number(a?.unitPrice) === Number(b?.unitPrice)
+    Number(a?.unitPrice) === Number(b?.unitPrice) &&
+    String(a?.note || '').trim() === String(b?.note || '').trim()
   );
 }
 
@@ -76,6 +77,7 @@ export default function EditOrderModal({
   const inventory = useStore((s) => s.inventory);
 
   const [lines, setLines] = useState([]);
+  const [orderNote, setOrderNote] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [itemSearch, setItemSearch] = useState('');
   const [configItem, setConfigItem] = useState(null);
@@ -104,6 +106,7 @@ export default function EditOrderModal({
 
         return {
           ...line,
+          note: typeof line.note === 'string' ? line.note : '',
           quantity,
           unitPrice,
           totalPrice: unitPrice * quantity,
@@ -111,6 +114,9 @@ export default function EditOrderModal({
       })
     );
 
+    setOrderNote(
+      typeof order.orderNote === 'string' ? order.orderNote : ''
+    );
     setPickerOpen(false);
     setItemSearch('');
     setConfigItem(null);
@@ -212,6 +218,10 @@ export default function EditOrderModal({
         isVariablePrice:
           Boolean(item?.isVariablePrice),
         unit: item?.unit || '',
+        note:
+          typeof options?.note === 'string'
+            ? options.note.trim()
+            : '',
       };
 
       setLines((prev) => {
@@ -253,26 +263,21 @@ export default function EditOrderModal({
 
   const handlePickInventoryItem = useCallback(
     (item) => {
-      const needsConfig =
-        item?.variants?.length > 0 ||
-        item?.addons?.length > 0 ||
-        item?.isWeightBased ||
-        item?.isVariablePrice;
-
-      if (needsConfig) {
-        setConfigItem(item);
-        return;
-      }
-
-      appendConfiguredItem(
-        item,
-        null,
-        [],
-        1
-      );
+      // Always open config so an item note can be added.
+      setConfigItem(item);
     },
-    [appendConfiguredItem]
+    []
   );
+
+  const updateLineNote = useCallback((id, note) => {
+    setLines((prev) =>
+      prev.map((line) =>
+        line.id === id
+          ? { ...line, note: String(note || '') }
+          : line
+      )
+    );
+  }, []);
 
   const handleSave = useCallback(() => {
     if (!lines.length) {
@@ -283,8 +288,8 @@ export default function EditOrderModal({
       return;
     }
 
-    onSave?.(lines);
-  }, [lines, onSave, t]);
+    onSave?.(lines, orderNote.trim());
+  }, [lines, orderNote, onSave, t]);
 
   const closeConfigItem = useCallback(() => {
     setConfigItem(null);
@@ -368,6 +373,17 @@ export default function EditOrderModal({
                       line.totalPrice
                     )}
                   </Text>
+
+                  <TextInput
+                    style={styles.noteInput}
+                    value={line.note || ''}
+                    onChangeText={(value) =>
+                      updateLineNote(line.id, value)
+                    }
+                    placeholder={t('itemNotePlaceholder')}
+                    placeholderTextColor={ui.textMuted}
+                    maxLength={120}
+                  />
                 </View>
 
                 <View style={styles.qtyBox}>
@@ -534,6 +550,17 @@ export default function EditOrderModal({
                 )}
               </View>
             ) : null}
+
+            <Text style={styles.noteLabel}>{t('orderNote')}</Text>
+            <TextInput
+              style={[styles.noteInput, styles.orderNoteInput]}
+              value={orderNote}
+              onChangeText={setOrderNote}
+              placeholder={t('orderNotePlaceholder')}
+              placeholderTextColor={ui.textMuted}
+              multiline
+              maxLength={200}
+            />
           </ScrollView>
 
           <View style={styles.footer}>
@@ -643,14 +670,14 @@ function createStyles(ui) {
 
     sub: {
       fontSize: 13,
-      color: '#868e96',
+      color: ui.textMuted,
       marginTop: 4,
       fontWeight: '600',
     },
 
     close: {
       fontSize: 20,
-      color: '#868e96',
+      color: ui.textMuted,
       fontWeight: '700',
     },
 
@@ -682,9 +709,35 @@ function createStyles(ui) {
 
     itemPrice: {
       fontSize: 13,
-      color: '#868e96',
+      color: ui.textMuted,
       marginTop: 4,
       fontWeight: '600',
+    },
+
+    noteLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: ui.textSecondary,
+      marginTop: 8,
+      marginBottom: 6,
+    },
+
+    noteInput: {
+      marginTop: 8,
+      borderWidth: 1,
+      borderColor: ui.border,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      fontSize: 13,
+      color: ui.textPrimary,
+      backgroundColor: ui.surfaceMuted,
+    },
+
+    orderNoteInput: {
+      minHeight: 64,
+      textAlignVertical: 'top',
+      marginBottom: 8,
     },
 
     qtyBox: {
@@ -698,7 +751,7 @@ function createStyles(ui) {
       width: 36,
       height: 36,
       borderRadius: 10,
-      backgroundColor: '#f1f3f5',
+      backgroundColor: ui.surfaceMuted,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1,
@@ -730,7 +783,7 @@ function createStyles(ui) {
 
     emptyHint: {
       textAlign: 'center',
-      color: '#868e96',
+      color: ui.textMuted,
       paddingVertical: 16,
       fontSize: 14,
     },
@@ -757,7 +810,7 @@ function createStyles(ui) {
       padding: 10,
       marginBottom: 8,
       backgroundColor:
-        ui.surfaceMuted || '#f8f9fa',
+        ui.surfaceMuted || ui.surfaceMuted,
       gap: 8,
     },
 
@@ -800,7 +853,7 @@ function createStyles(ui) {
 
     footer: {
       borderTopWidth: 1,
-      borderTopColor: '#f1f3f5',
+      borderTopColor: ui.surfaceMuted,
       paddingTop: 12,
       marginTop: 4,
     },
@@ -819,7 +872,7 @@ function createStyles(ui) {
 
     cancelBtn: {
       flex: 1,
-      backgroundColor: '#f1f3f5',
+      backgroundColor: ui.surfaceMuted,
       borderRadius: 12,
       paddingVertical: 13,
       alignItems: 'center',
@@ -829,7 +882,7 @@ function createStyles(ui) {
 
     cancelText: {
       fontWeight: '700',
-      color: '#495057',
+      color: ui.textSecondary,
     },
 
     saveBtn: {

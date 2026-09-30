@@ -3,7 +3,9 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import uuid from 'react-native-uuid';
 
-import { validateLicenseKey } from '../utils/licenseKey';
+import { getLicenseAccess } from '../utils/licenseKey';
+import { APP_VERSION, verifyAccountAccess, setAccountLoginState } from '../utils/licenseRemote';
+import { createEncryptedAsyncStorage } from '../utils/secureCrypto';
 import {
   calculateTaxBreakdown,
   DEFAULT_THEME,
@@ -177,7 +179,8 @@ export const calculateItemPrice = (
 const cartLineKey = (
   itemId,
   selectedVariant = null,
-  selectedAddons = []
+  selectedAddons = [],
+  note = ''
 ) => {
   const variantPart =
     selectedVariant &&
@@ -211,9 +214,11 @@ const cartLineKey = (
           .join(',')
       : '';
 
+  const notePart = `n:${String(note ?? '').trim()}`;
+
   return `${String(
     itemId ?? ''
-  )}::${variantPart}::${addonsPart}`;
+  )}::${variantPart}::${addonsPart}::${notePart}`;
 };
 
 /* =========================================================
@@ -302,6 +307,11 @@ const normalizeLineItem = (line) => {
 
     unit:
       normalizeUnit(line.unit),
+
+    note:
+      typeof line.note === 'string'
+        ? line.note.trim()
+        : '',
   };
 };
 
@@ -390,6 +400,11 @@ const normalizeOrder = (order) => {
       typeof order.customerPhone ===
       'string'
         ? order.customerPhone
+        : '',
+
+    orderNote:
+      typeof order.orderNote === 'string'
+        ? order.orderNote.trim()
         : '',
 
     cartSubtotal,
@@ -768,26 +783,45 @@ const useStore = create(
 
       licenseExpiry: null,
 
+      loginSessionId: '',
+
       isAuthenticated: false,
+
+      forceUpdateRequired: false,
+
+      forceUpdateInfo: null,
 
       /* ===================================================
          LOGIN
       =================================================== */
 
-      login: (
+      login: async (
         shopName,
-        licenseKey
+        licenseKey,
+        options = {}
       ) => {
-        const result =
-          validateLicenseKey(
-            licenseKey
-          );
+        const trimmedShop =
+          typeof shopName ===
+          'string'
+            ? shopName.trim()
+            : '';
 
-        if (!result.valid) {
-          if (
-            result.reason ===
-            'expired'
-          ) {
+        const trimmedKey =
+          typeof licenseKey ===
+          'string'
+            ? licenseKey
+                .trim()
+                .toUpperCase()
+            : '';
+
+        const allowTakeover = Boolean(
+          options.logoutOtherDevices
+        );
+
+        const result = getLicenseAccess(trimmedKey);
+
+        if (!result.allowed) {
+          if (result.reason === 'expired') {
             return {
               success: false,
               reason: 'expired',
@@ -803,29 +837,116 @@ const useStore = create(
           };
         }
 
-        set({
-          shopName:
-            typeof shopName ===
-            'string'
-              ? shopName.trim()
-              : '',
+        let remote = {
+          ok: true,
+          blocked: false,
+          offline: true,
+        };
 
-          licenseKey:
-            typeof licenseKey ===
-            'string'
-              ? licenseKey
-                  .trim()
-                  .toUpperCase()
-              : '',
+        try {
+          remote =
+            await verifyAccountAccess({
+              shopName: trimmedShop,
+              licenseKey: trimmedKey,
+              appVersion: APP_VERSION,
+              allowTakeover,
+            });
+        } catch (error) {
+          console.error(
+            'Remote license check failed:',
+            error
+          );
+        }
+
+        const sessionId = createId();
+
+        if (remote.offline) {
+          set({
+            shopName: trimmedShop,
+            licenseKey: trimmedKey,
+            licenseExpiry: result.expiryMs || null,
+            loginSessionId: sessionId,
+            isAuthenticated: true,
+            forceUpdateRequired: false,
+            forceUpdateInfo: null,
+          });
+
+          return {
+            success: true,
+            offline: true,
+          };
+        }
+
+        if (remote.forceUpdate) {
+          set({
+            forceUpdateRequired: true,
+            forceUpdateInfo:
+              remote.update || null,
+          });
+
+          return {
+            success: false,
+            reason: 'force_update',
+            error:
+              remote.error ||
+              remote.update?.message ||
+              'Please download the latest NAM bill app.',
+            downloadUrl:
+              remote.update?.downloadUrl,
+          };
+        }
+
+        if (remote.blocked) {
+          return {
+            success: false,
+            reason:
+              remote.reason ||
+              'blocked',
+            error:
+              remote.error ||
+              'This account cannot log in.',
+          };
+        }
+
+        if (remote.row) {
+          try {
+            // Takeover / fresh login always writes a new session onto the sheet.
+            await setAccountLoginState({
+              shopName: trimmedShop,
+              licenseKey: trimmedKey,
+              isLogin: true,
+              sessionId,
+              row: remote.row || null,
+            });
+          } catch (error) {
+            // Do not block login if sheet write fails — local session still works.
+            console.error('Could not update Is Login:', error);
+          }
+        }
+
+        set({
+          shopName: trimmedShop,
+
+          licenseKey: trimmedKey,
 
           licenseExpiry:
+            remote.expiryMs ||
             result.expiryMs,
 
+          loginSessionId: sessionId,
+
           isAuthenticated: true,
+
+          forceUpdateRequired: false,
+
+          forceUpdateInfo: null,
         });
 
         return {
           success: true,
+          updateAvailable: Boolean(remote.updateAvailable),
+          updateMessage: remote.update?.message,
+          downloadUrl: remote.update?.downloadUrl,
         };
       },
 
@@ -833,7 +954,33 @@ const useStore = create(
          LOGOUT
       =================================================== */
 
-      logout: () => {
+      logout: async (options = {}) => {
+        const updateSheet = options.updateSheet !== false;
+        const {
+          shopName,
+          licenseKey,
+        } = get();
+
+        if (
+          updateSheet &&
+          shopName &&
+          licenseKey
+        ) {
+          try {
+            await setAccountLoginState({
+              shopName,
+              licenseKey,
+              isLogin: false,
+              sessionId: '',
+            });
+          } catch (error) {
+            console.error(
+              'Could not clear Is Login:',
+              error
+            );
+          }
+        }
+
         set({
           shopName: '',
 
@@ -841,7 +988,13 @@ const useStore = create(
 
           licenseExpiry: null,
 
+          loginSessionId: '',
+
           isAuthenticated: false,
+
+          forceUpdateRequired: false,
+
+          forceUpdateInfo: null,
 
           cart: [],
         });
@@ -856,6 +1009,8 @@ const useStore = create(
           const {
             licenseKey,
             isAuthenticated,
+            shopName,
+            loginSessionId,
           } = get();
 
           if (
@@ -865,21 +1020,89 @@ const useStore = create(
             return false;
           }
 
-          const result =
-            validateLicenseKey(
-              licenseKey
-            );
+          const access = getLicenseAccess(licenseKey);
 
-          if (!result.valid) {
-            get().logout();
+          if (!access.allowed) {
+            get().logout({ updateSheet: true });
 
             return false;
           }
 
           set({
             licenseExpiry:
-              result.expiryMs,
+              access.expiryMs,
           });
+
+          verifyAccountAccess({
+            shopName,
+            licenseKey,
+            appVersion: APP_VERSION,
+            sessionId: loginSessionId,
+          })
+            .then((remote) => {
+              if (remote.offline) {
+                return;
+              }
+
+              if (
+                remote.forceUpdate
+              ) {
+                set({
+                  forceUpdateRequired: true,
+                  forceUpdateInfo:
+                    remote.update ||
+                    null,
+                });
+                return;
+              }
+
+              if (remote.blocked) {
+                const kicked =
+                  remote.reason ===
+                    'session_replaced' ||
+                  remote.reason ===
+                    'logged_out_remotely';
+                get().logout({
+                  updateSheet: !kicked,
+                });
+                return;
+              }
+
+              const state = get();
+              if (
+                remote.ok &&
+                !remote.offline &&
+                (!remote.alreadyLoggedIn ||
+                  !state.loginSessionId)
+              ) {
+                const sessionId =
+                  state.loginSessionId ||
+                  createId();
+                if (
+                  sessionId !==
+                  state.loginSessionId
+                ) {
+                  set({
+                    loginSessionId:
+                      sessionId,
+                  });
+                }
+                setAccountLoginState({
+                  shopName: state.shopName,
+                  licenseKey:
+                    state.licenseKey,
+                  isLogin: true,
+                  sessionId,
+                  row: remote.row || null,
+                }).catch(() => {});
+              }
+            })
+            .catch((error) => {
+              console.error(
+                'Remote license check failed:',
+                error
+              );
+            });
 
           return true;
         } catch (error) {
@@ -888,7 +1111,7 @@ const useStore = create(
             error
           );
 
-          get().logout();
+          get().logout({ updateSheet: false });
 
           return false;
         }
@@ -1494,6 +1717,11 @@ const useStore = create(
             ? options.unitPrice
             : null;
 
+        const itemNote =
+          typeof options?.note === 'string'
+            ? options.note.trim()
+            : '';
+
         const unitPrice =
           calculateItemPrice(
             item,
@@ -1506,7 +1734,8 @@ const useStore = create(
           cartLineKey(
             item.id,
             safeVariant,
-            safeAddons
+            safeAddons,
+            itemNote
           );
 
         const isWeightBased =
@@ -1549,7 +1778,8 @@ const useStore = create(
                   cartLineKey(
                     cartItem.itemId,
                     cartItem.selectedVariant,
-                    cartItem.selectedAddons
+                    cartItem.selectedAddons,
+                    cartItem.note
                   );
 
                 return (
@@ -1608,6 +1838,8 @@ const useStore = create(
               isVariablePrice,
 
               unit,
+
+              note: itemNote,
             };
 
             return {
@@ -1744,6 +1976,29 @@ const useStore = create(
                     }
               : item
           ),
+        }));
+      },
+
+      updateCartItemNote: (
+        cartItemId,
+        note = ''
+      ) => {
+        const nextNote =
+          typeof note === 'string'
+            ? note.trim()
+            : '';
+
+        set((state) => ({
+          cart: state.cart
+            .filter(Boolean)
+            .map((item) =>
+              item.id === cartItemId
+                ? {
+                    ...item,
+                    note: nextNote,
+                  }
+                : item
+            ),
         }));
       },
 
@@ -2817,8 +3072,13 @@ const useStore = create(
           isPaid = false,
           offerApplied = false,
           tableId = null,
+          orderNote = '',
         } = {}
       ) => {
+        const nextOrderNote =
+          typeof orderNote === 'string'
+            ? orderNote.trim()
+            : '';
         const {
           cart,
           shopOffer,
@@ -2972,6 +3232,11 @@ const useStore = create(
             customerPhone:
               nextPhone,
 
+            orderNote:
+              nextOrderNote ||
+              existingOrder.orderNote ||
+              '',
+
             isPaid: paid,
           };
 
@@ -3119,6 +3384,8 @@ const useStore = create(
               ? customerPhone.trim()
               : '',
 
+          orderNote: nextOrderNote,
+
           isPaid: paid,
 
           isWrongOrder:
@@ -3249,7 +3516,10 @@ const useStore = create(
 
       updateOrderItems: (
         orderKey,
-        nextItems = []
+        nextItems = [],
+        {
+          orderNote,
+        } = {}
       ) => {
         const order =
           get().history.find(
@@ -3416,6 +3686,11 @@ const useStore = create(
                           ),
                         0
                       ),
+
+                    orderNote:
+                      orderNote !== undefined
+                        ? String(orderNote || '').trim()
+                        : entry.orderNote || '',
 
                     isEdited:
                       true,
@@ -4135,8 +4410,14 @@ const useStore = create(
 
           licenseExpiry: null,
 
+          loginSessionId: '',
+
           isAuthenticated:
             false,
+
+          forceUpdateRequired: false,
+
+          forceUpdateInfo: null,
         });
       },
     }),
@@ -4150,7 +4431,7 @@ const useStore = create(
 
       storage:
         createJSONStorage(
-          () => AsyncStorage
+          () => createEncryptedAsyncStorage(AsyncStorage)
         ),
 
       partialize: (state) => ({
@@ -4260,6 +4541,9 @@ const useStore = create(
 
         licenseExpiry:
           state.licenseExpiry,
+
+        loginSessionId:
+          state.loginSessionId || '',
 
         isAuthenticated:
           state.isAuthenticated,
@@ -4454,6 +4738,12 @@ const useStore = create(
             licenseExpiry:
               saved.licenseExpiry ??
               null,
+
+            loginSessionId:
+              typeof saved.loginSessionId ===
+              'string'
+                ? saved.loginSessionId
+                : '',
 
             isAuthenticated:
               Boolean(
