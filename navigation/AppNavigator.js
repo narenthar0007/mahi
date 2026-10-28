@@ -424,6 +424,7 @@ function MainTabs() {
     <>
       <Tab.Navigator
         screenOptions={({ route }) => ({
+          lazy: true,
           header: () => renderHeader({ route }),
 
           tabBarActiveTintColor:
@@ -807,7 +808,7 @@ export default function AppNavigator() {
             error
           );
         }
-      }, 15 * 1000);
+      }, 60 * 1000);
 
     return () => {
       clearInterval(interval);

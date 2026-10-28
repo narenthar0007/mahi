@@ -42,6 +42,13 @@ yarn-error.*
 release/
 *.apk
 *.aab
+NAM-bill-Windows/
+NAM-bill-Windows.zip
+electron-builder-output/
+*.exe
+
+# Git metadata (not needed on EAS)
+.git/
 
 # macOS
 .DS_Store

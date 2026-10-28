@@ -518,6 +518,99 @@ export function createEncryptedAsyncStorage(baseStorage) {
   };
 }
 
+/**
+ * Batches rapid persist writes so encrypt + AsyncStorage do not block the UI on every tap.
+ */
+export function createDebouncedEncryptedAsyncStorage(
+  baseStorage,
+  debounceMs = 600
+) {
+  const inner = createEncryptedAsyncStorage(baseStorage);
+  let timer = null;
+  let pendingName = null;
+  let pendingValue = null;
+  let flushWaiters = [];
+  let flushInFlight = null;
+
+  const runFlush = async () => {
+    if (pendingName == null) {
+      return;
+    }
+
+    const name = pendingName;
+    const value = pendingValue;
+    pendingName = null;
+    pendingValue = null;
+
+    const waiters = flushWaiters;
+    flushWaiters = [];
+
+    try {
+      flushInFlight = inner.setItem(name, value);
+      await flushInFlight;
+      waiters.forEach(({ resolve }) => resolve());
+    } catch (error) {
+      waiters.forEach(({ reject }) => reject(error));
+      throw error;
+    } finally {
+      flushInFlight = null;
+    }
+  };
+
+  const scheduleFlush = () => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+
+    timer = setTimeout(() => {
+      timer = null;
+      runFlush().catch((error) => {
+        console.error('Debounced persist write failed:', error);
+      });
+    }, debounceMs);
+  };
+
+  return {
+    getItem: inner.getItem,
+    removeItem: async (name) => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      pendingName = null;
+      pendingValue = null;
+      flushWaiters.forEach(({ resolve }) => resolve());
+      flushWaiters = [];
+      if (flushInFlight) {
+        await flushInFlight.catch(() => {});
+      }
+      await inner.removeItem(name);
+    },
+    setItem: (name, value) => {
+      pendingName = name;
+      pendingValue = value;
+
+      return new Promise((resolve, reject) => {
+        flushWaiters.push({ resolve, reject });
+        scheduleFlush();
+      });
+    },
+    flushPending: async () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (pendingName == null) {
+        if (flushInFlight) {
+          await flushInFlight;
+        }
+        return;
+      }
+      await runFlush();
+    },
+  };
+}
+
 export function encryptBackupPayload(payload) {
   return encryptText(JSON.stringify(payload));
 }

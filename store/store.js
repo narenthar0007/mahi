@@ -5,7 +5,15 @@ import uuid from 'react-native-uuid';
 
 import { getLicenseAccess } from '../utils/licenseKey';
 import { APP_VERSION, verifyAccountAccess, setAccountLoginState } from '../utils/licenseRemote';
-import { createEncryptedAsyncStorage } from '../utils/secureCrypto';
+import {
+  createDebouncedEncryptedAsyncStorage,
+} from '../utils/secureCrypto';
+
+const PERSIST_DEBOUNCE_MS = 650;
+const debouncedPersistStorage = createDebouncedEncryptedAsyncStorage(
+  AsyncStorage,
+  PERSIST_DEBOUNCE_MS
+);
 import {
   calculateTaxBreakdown,
   DEFAULT_THEME,
@@ -474,6 +482,11 @@ const normalizeOrder = (order) => {
     isWrongOrder:
       Boolean(order.isWrongOrder),
 
+    isDue:
+      Boolean(order.isPaid)
+        ? false
+        : Boolean(order.isDue),
+
     isOrderReady:
       Boolean(order.isOrderReady),
 
@@ -754,6 +767,8 @@ const useStore = create(
       enableVariablePriceItems:
         false,
 
+      enableDueOrders: false,
+
       shopOffer: {
         ...DEFAULT_SHOP_OFFER,
       },
@@ -1028,10 +1043,15 @@ const useStore = create(
             return false;
           }
 
-          set({
-            licenseExpiry:
-              access.expiryMs,
-          });
+          if (
+            get().licenseExpiry !==
+            access.expiryMs
+          ) {
+            set({
+              licenseExpiry:
+                access.expiryMs,
+            });
+          }
 
           verifyAccountAccess({
             shopName,
@@ -1763,6 +1783,9 @@ const useStore = create(
                 )
               : [];
 
+          const normalizedUnitPrice =
+            safeNumber(unitPrice, 0);
+
           const existingIndex =
             safeCart.findIndex(
               (cartItem) => {
@@ -1775,12 +1798,15 @@ const useStore = create(
                 }
 
                 const existingKey =
-                  cartLineKey(
-                    cartItem.itemId,
-                    cartItem.selectedVariant,
-                    cartItem.selectedAddons,
-                    cartItem.note
-                  );
+                  typeof cartItem.lineKey ===
+                  'string'
+                    ? cartItem.lineKey
+                    : cartLineKey(
+                        cartItem.itemId,
+                        cartItem.selectedVariant,
+                        cartItem.selectedAddons,
+                        cartItem.note
+                      );
 
                 return (
                   existingKey ===
@@ -1788,11 +1814,7 @@ const useStore = create(
                   safeNumber(
                     cartItem.unitPrice,
                     0
-                  ) ===
-                    safeNumber(
-                      unitPrice,
-                      0
-                    )
+                  ) === normalizedUnitPrice
                 );
               }
             );
@@ -1803,6 +1825,8 @@ const useStore = create(
           ) {
             const cartItem = {
               id: createId(),
+
+              lineKey,
 
               itemId:
                 String(item.id),
@@ -2046,6 +2070,7 @@ const useStore = create(
         enableTables,
         enableWeightBasedPricing,
         enableVariablePriceItems,
+        enableDueOrders,
         shopOffer,
         menuListView,
         shopWebsite,
@@ -2164,6 +2189,14 @@ const useStore = create(
         ) {
           updates.enableVariablePriceItems =
             enableVariablePriceItems;
+        }
+
+        if (
+          typeof enableDueOrders ===
+          'boolean'
+        ) {
+          updates.enableDueOrders =
+            enableDueOrders;
         }
 
         if (
@@ -3070,6 +3103,7 @@ const useStore = create(
         {
           taxEnabled = false,
           isPaid = false,
+          isDue = false,
           offerApplied = false,
           tableId = null,
           orderNote = '',
@@ -3172,8 +3206,13 @@ const useStore = create(
               }
             );
 
+          const due =
+            Boolean(isDue) &&
+            !Boolean(isPaid);
+
           const paid =
-            Boolean(isPaid);
+            Boolean(isPaid) &&
+            !due;
 
           const nextPhone =
             typeof customerPhone ===
@@ -3238,6 +3277,11 @@ const useStore = create(
               '',
 
             isPaid: paid,
+
+            isDue: due,
+
+            isWrongOrder:
+              existingOrder.isWrongOrder,
           };
 
           set((state) => ({
@@ -3320,8 +3364,13 @@ const useStore = create(
             0
           ) + 1;
 
+        const due =
+          Boolean(isDue) &&
+          !Boolean(isPaid);
+
         const paid =
-          Boolean(isPaid);
+          Boolean(isPaid) &&
+          !due;
 
         const order = {
           id: createId(),
@@ -3387,6 +3436,8 @@ const useStore = create(
           orderNote: nextOrderNote,
 
           isPaid: paid,
+
+          isDue: due,
 
           isWrongOrder:
             false,
@@ -3762,6 +3813,9 @@ const useStore = create(
 
                         isPaid:
                           true,
+
+                        isDue:
+                          false,
                       }
                     : entry;
                 }
@@ -4081,6 +4135,14 @@ const useStore = create(
         }
 
         if (
+          typeof snapshot.enableDueOrders ===
+          'boolean'
+        ) {
+          updates.enableDueOrders =
+            snapshot.enableDueOrders;
+        }
+
+        if (
           typeof snapshot.menuListView ===
           'boolean'
         ) {
@@ -4230,6 +4292,9 @@ const useStore = create(
               data.enableVariablePriceItems
             ),
 
+          enableDueOrders:
+            Boolean(data.enableDueOrders),
+
           shopOffer:
             normalizeShopOffer(
               data.shopOffer
@@ -4378,6 +4443,9 @@ const useStore = create(
           enableVariablePriceItems:
             false,
 
+          enableDueOrders:
+            false,
+
           shopOffer: {
             ...DEFAULT_SHOP_OFFER,
           },
@@ -4431,7 +4499,7 @@ const useStore = create(
 
       storage:
         createJSONStorage(
-          () => createEncryptedAsyncStorage(AsyncStorage)
+          () => debouncedPersistStorage
         ),
 
       partialize: (state) => ({
@@ -4496,6 +4564,9 @@ const useStore = create(
 
         enableVariablePriceItems:
           state.enableVariablePriceItems,
+
+        enableDueOrders:
+          state.enableDueOrders,
 
         shopOffer:
           state.shopOffer,
@@ -4666,6 +4737,9 @@ const useStore = create(
                 saved.enableVariablePriceItems
               ),
 
+            enableDueOrders:
+              Boolean(saved.enableDueOrders),
+
             shopOffer:
               normalizeShopOffer(
                 saved.shopOffer
@@ -4814,5 +4888,9 @@ const useStore = create(
     }
   )
 );
+
+export function flushPersistedStore() {
+  return debouncedPersistStorage.flushPending();
+}
 
 export default useStore;

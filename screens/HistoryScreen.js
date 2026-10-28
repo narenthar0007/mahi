@@ -99,6 +99,7 @@ export default function HistoryScreen() {
   const history = useStore((s) => s.history);
   const tables = useStore((s) => s.tables);
   const enableTables = useStore((s) => s.enableTables);
+  const enableDueOrders = useStore((s) => s.enableDueOrders);
   const shopName = useStore((s) => s.shopName);
   const updateOrderCustomerPhone = useStore((s) => s.updateOrderCustomerPhone);
   const updateOrderItems = useStore((s) => s.updateOrderItems);
@@ -480,6 +481,24 @@ export default function HistoryScreen() {
     }
   };
 
+  const handleDueReminder = (order) => {
+    if (!order?.isDue || order.isPaid) {
+      return;
+    }
+    const phone = normalizePhoneNumber(order.customerPhone || '');
+    if (!phone) {
+      showAlert(t('noWhatsAppNumber'), t('noWhatsAppNumberMsg'));
+      return;
+    }
+    const message = t('dueReminderWhatsAppBody', {
+      shop: shopName || 'Shop',
+      amount: formatCurrency(order.totalAmount),
+      orderId: order.orderId || order.id || '',
+      date: formatDateTime(order.timestamp),
+    });
+    sendViaWhatsApp(message, phone);
+  };
+
   const handleWrongOrder = (order) => {
     if (order.isPaid) {
       showAlert(t('wrongOrderPaidTitle'), t('wrongOrderPaidMsg'));
@@ -579,6 +598,12 @@ export default function HistoryScreen() {
         borderColor: 'rgba(220, 38, 38, 0.35)',
       };
     }
+    if (order.isDue && !order.isPaid) {
+      return {
+        backgroundColor: 'rgba(217, 119, 6, 0.12)',
+        borderColor: 'rgba(217, 119, 6, 0.45)',
+      };
+    }
     if (order.isPaid) {
       return {
         backgroundColor: TABLE_COLORS.paid.backgroundColor,
@@ -633,6 +658,11 @@ export default function HistoryScreen() {
                 <Text style={styles.wrongBadgeText}>{t('wrongOrderBadge')}</Text>
               </View>
             ) : null}
+            {item.isDue && !item.isPaid ? (
+              <View style={styles.dueBadge}>
+                <Text style={styles.dueBadgeText}>{t('dueOrderBadge')}</Text>
+              </View>
+            ) : null}
           </View>
           <View style={styles.totalBox}>
             <View style={styles.amountRow}>
@@ -671,22 +701,33 @@ export default function HistoryScreen() {
               </TouchableOpacity>
             </View>
             {!item.isPaid ? (
-              <TouchableOpacity
-                style={[
-                  styles.wrongBtn,
-                  item.isWrongOrder && styles.wrongBtnActive,
-                ]}
-                onPress={() => handleWrongOrder(item)}
-              >
-                <Text
+              <View style={styles.secondaryActionRow}>
+                {item.isDue && enableDueOrders !== false ? (
+                  <TouchableOpacity
+                    style={styles.dueReminderBtn}
+                    onPress={() => handleDueReminder(item)}
+                  >
+                    <Text style={styles.dueReminderBtnText}>{t('sendDueReminder')}</Text>
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
                   style={[
-                    styles.wrongBtnText,
-                    item.isWrongOrder && styles.wrongBtnTextActive,
+                    styles.wrongBtn,
+                    item.isWrongOrder && styles.wrongBtnActive,
+                    item.isDue && styles.wrongBtnDueCompanion,
                   ]}
+                  onPress={() => handleWrongOrder(item)}
                 >
-                  {item.isWrongOrder ? t('undoWrongOrder') : t('markWrongOrder')}
-                </Text>
-              </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.wrongBtnText,
+                      item.isWrongOrder && styles.wrongBtnTextActive,
+                    ]}
+                  >
+                    {item.isWrongOrder ? t('undoWrongOrder') : t('markWrongOrder')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ) : null}
           </View>
         </View>
@@ -790,6 +831,7 @@ export default function HistoryScreen() {
     editingPhone,
     shopName,
     language,
+    enableDueOrders,
   ]);
 
   return (
@@ -815,6 +857,10 @@ export default function HistoryScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          initialNumToRender={10}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS !== 'web'}
         />
         {menuOrder ? (
           <View style={styles.menuOverlay}>
@@ -1061,6 +1107,41 @@ function createStyles(ui) {
     fontSize: 11,
     fontWeight: '800',
   },
+  dueBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(217, 119, 6, 0.15)',
+    borderColor: 'rgba(217, 119, 6, 0.55)',
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  dueBadgeText: {
+    color: '#b45309',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  secondaryActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 8,
+    flexWrap: 'wrap',
+  },
+  dueReminderBtn: {
+    backgroundColor: 'rgba(217, 119, 6, 0.12)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(217, 119, 6, 0.45)',
+  },
+  dueReminderBtnText: {
+    color: '#b45309',
+    fontSize: 12,
+    fontWeight: '800',
+  },
   tableBadge: {
     alignSelf: 'flex-start',
     borderWidth: 1,
@@ -1151,7 +1232,9 @@ function createStyles(ui) {
     borderRadius: 8,
     borderWidth: 1,
     borderColor: ui.danger,
-    alignSelf: 'flex-end',
+  },
+  wrongBtnDueCompanion: {
+    alignSelf: 'auto',
   },
   wrongBtnActive: {
     backgroundColor: ui.dangerBg,

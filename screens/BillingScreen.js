@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import useStore from '../store/store';
 import ItemConfigModal from '../components/ItemConfigModal';
+import BillingMenuListItem from '../components/BillingMenuListItem';
 import ConfirmModal from '../components/ConfirmModal';
 import { formatCurrency } from '../utils/currency';
 import { confirmAction, showAlert } from '../utils/alert';
@@ -53,7 +54,6 @@ export default function BillingScreen() {
   const updateCartItemQuantity = useStore((s) => s.updateCartItemQuantity);
   const updateCartItemNote = useStore((s) => s.updateCartItemNote);
   const checkout = useStore((s) => s.checkout);
-  const getCartTotal = useStore((s) => s.getCartTotal);
   const history = useStore((s) => s.history);
   const tables = useStore((s) => s.tables);
   const activeTableId = useStore((s) => s.activeTableId);
@@ -66,6 +66,7 @@ export default function BillingScreen() {
   const includeWebsitesInWhatsApp = useStore((s) => s.includeWebsitesInWhatsApp);
   const upiQrUri = useStore((s) => s.upiQrUri);
   const showWhatsAppInvoiceButtons = useStore((s) => s.showWhatsAppInvoiceButtons);
+  const enableDueOrders = useStore((s) => s.enableDueOrders);
   const shopOffer = useStore((s) => s.shopOffer);
   const menuListView = useStore((s) => s.menuListView);
   const setMenuListView = useStore((s) => s.setMenuListView);
@@ -86,6 +87,7 @@ export default function BillingScreen() {
   const [billVisible, setBillVisible] = useState(false);
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [billPaid, setBillPaid] = useState(false);
+  const [billDue, setBillDue] = useState(false);
   const [upiCheckout, setUpiCheckout] = useState(null);
   const [sharingUpiQr, setSharingUpiQr] = useState(false);
 
@@ -112,7 +114,14 @@ export default function BillingScreen() {
     [activeInventory, searchQuery, sortBy]
   );
 
-  const cartTotal = getCartTotal();
+  const cartTotal = useMemo(
+    () =>
+      cart.reduce(
+        (sum, line) => sum + (Number(line?.totalPrice) || 0),
+        0
+      ),
+    [cart]
+  );
   const taxBreakdown = useMemo(
     () => calculateBillTotals(cartTotal, { taxEnabled, shopOffer, offerApplied: false }),
     [cartTotal, taxEnabled, shopOffer]
@@ -138,15 +147,6 @@ export default function BillingScreen() {
     () => cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),
     [cart]
   );
-  const cartQtyByItemId = useMemo(() => {
-    const map = {};
-    for (const line of cart) {
-      if (!line?.itemId) continue;
-      const id = String(line.itemId);
-      map[id] = (map[id] || 0) + (Number(line.quantity) || 0);
-    }
-    return map;
-  }, [cart]);
   const activeTable = useMemo(
     () => tables.find((entry) => entry.id === activeTableId) || null,
     [tables, activeTableId]
@@ -175,36 +175,14 @@ export default function BillingScreen() {
     setOrderNote(order?.orderNote || '');
   }, [activeTableId, activeTable?.currentOrderId, history]);
 
-  const handleMenuItemPress = (item) => {
+  const handleMenuItemPress = useCallback((item) => {
     // Always open config so staff can add an item note (and variants/add-ons).
     setSelectedItem(item);
     setModalVisible(true);
-  };
+  }, []);
 
   const handleAddToCart = (item, selectedVariant, selectedAddons, quantity = 1, options = {}) => {
     addToCart(item, selectedVariant, selectedAddons, quantity, options);
-  };
-
-  const getMenuItemHighlight = (item) => {
-    if (item.isWeightBased && item.isVariablePrice) {
-      return {
-        backgroundColor: 'rgba(255, 213, 79, 0.28)',
-        borderColor: 'rgba(30, 136, 229, 0.55)',
-      };
-    }
-    if (item.isWeightBased) {
-      return {
-        backgroundColor: 'rgba(255, 213, 79, 0.32)',
-        borderColor: 'rgba(245, 180, 0, 0.5)',
-      };
-    }
-    if (item.isVariablePrice) {
-      return {
-        backgroundColor: 'rgba(66, 165, 245, 0.28)',
-        borderColor: 'rgba(30, 136, 229, 0.5)',
-      };
-    }
-    return null;
   };
 
   const formatQuantityLabel = (cartItem) => {
@@ -234,6 +212,7 @@ export default function BillingScreen() {
       const order = checkout(phone, {
         taxEnabled,
         isPaid: billPaid,
+        isDue: Boolean(enableDueOrders) && billDue,
         offerApplied,
         tableId: activeTableId || null,
         orderNote,
@@ -248,6 +227,7 @@ export default function BillingScreen() {
       setOrderNote('');
       setTaxEnabled(false);
       setBillPaid(false);
+      setBillDue(false);
       setCheckoutOfferApplied(false);
       clearActiveTable();
 
@@ -374,133 +354,46 @@ export default function BillingScreen() {
     return parts.join(' · ');
   };
 
-  const formatItemMetaLine = (item) => {
-    const parts = [];
-    if (item.itemNumber) {
-      parts.push(`${t('menuId')} ${item.itemNumber}`);
-    }
-    if (item.variants?.length > 0) {
-      parts.push(t('variantsBadge', { count: item.variants.length }));
-    }
-    if (item.addons?.length > 0) {
-      parts.push(t('addonsBadge', { count: item.addons.length }));
-    }
-    return parts.join(' · ');
-  };
+  const formatItemMetaLine = useCallback(
+    (item) => {
+      const parts = [];
+      if (item.itemNumber) {
+        parts.push(`${t('menuId')} ${item.itemNumber}`);
+      }
+      if (item.variants?.length > 0) {
+        parts.push(t('variantsBadge', { count: item.variants.length }));
+      }
+      if (item.addons?.length > 0) {
+        parts.push(t('addonsBadge', { count: item.addons.length }));
+      }
+      return parts.join(' · ');
+    },
+    [t]
+  );
 
-  const renderMenuItem = useCallback(({ item }) => {
-    const highlight = getMenuItemHighlight(item);
-    const cartQty = cartQtyByItemId[String(item.id)] || 0;
-    const inCart = cartQty > 0;
-    const priceLabel = item.isVariablePrice
-      ? t('variablePriceShort')
-      : `${formatCurrency(item.basePrice ?? 0)}${item.isWeightBased && item.unit ? `/${item.unit}` : ''}`;
+  const menuTheme = useMemo(
+    () => ({
+      buttonColor: theme.buttonColor,
+      filterSortColor: theme.filterSortColor,
+      textColor: theme.textColor,
+    }),
+    [theme.buttonColor, theme.filterSortColor, theme.textColor]
+  );
 
-    const badges = (
-      <>
-        {item.isWeightBased ? (
-          <View style={[styles.menuListBadge, { backgroundColor: 'rgba(245, 180, 0, 0.22)' }]}>
-            <Text style={[styles.menuListBadgeText, { color: '#b8860b' }]}>w</Text>
-          </View>
-        ) : null}
-        {item.isVariablePrice ? (
-          <View style={[styles.menuListBadge, { backgroundColor: 'rgba(30, 136, 229, 0.18)' }]}>
-            <Text style={[styles.menuListBadgeText, { color: '#1565c0' }]}>₹</Text>
-          </View>
-        ) : null}
-        {(item.variants?.length ?? 0) > 0 ? (
-          <View style={[styles.menuListBadge, { backgroundColor: `${theme.buttonColor}18` }]}>
-            <Text style={[styles.menuListBadgeText, { color: theme.buttonColor }]}>v</Text>
-          </View>
-        ) : null}
-        {(item.addons?.length ?? 0) > 0 ? (
-          <View style={[styles.menuListBadge, { backgroundColor: `${theme.filterSortColor}18` }]}>
-            <Text style={[styles.menuListBadgeText, { color: theme.filterSortColor }]}>a</Text>
-          </View>
-        ) : null}
-      </>
-    );
-
-    const qtyBadge = inCart ? (
-      <View
-        style={[
-          menuListView ? styles.cartQtyBadgeInline : styles.cartQtyBadge,
-          { backgroundColor: theme.buttonColor },
-        ]}
-      >
-        <Text style={styles.cartQtyBadgeText}>
-          {Number.isInteger(cartQty) ? cartQty : Math.round(cartQty * 100) / 100}
-        </Text>
-      </View>
-    ) : null;
-
-    if (menuListView) {
-      return (
-        <Pressable
-          style={({ pressed }) => [
-            styles.menuRowItem,
-            highlight && styles.menuRowItemHighlight,
-            inCart && styles.menuRowItemInCart,
-            pressed && styles.menuRowItemPressed,
-          ]}
-          onPress={() => handleMenuItemPress(item)}
-        >
-          <View style={styles.menuRowMain}>
-            <View style={styles.menuRowTitleLine}>
-              <Text style={[styles.menuRowName, { color: theme.textColor }]} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <View style={styles.badgeGroup}>{badges}</View>
-            </View>
-            <Text style={styles.menuRowMeta} numberOfLines={1}>
-              {formatItemMetaLine(item)}
-            </Text>
-          </View>
-          <View style={styles.menuRowTrailing}>
-            {qtyBadge}
-            <Text style={[styles.menuRowPrice, { color: theme.buttonColor }]}>{priceLabel}</Text>
-          </View>
-        </Pressable>
-      );
-    }
-
-    return (
-      <Pressable
-        style={({ pressed }) => [
-          styles.menuCard,
-          highlight && styles.menuCardHighlight,
-          inCart && styles.menuCardInCart,
-          pressed && styles.menuCardPressed,
-        ]}
-        onPress={() => handleMenuItemPress(item)}
-      >
-        {inCart ? (
-          <View style={[styles.inCartPill, { backgroundColor: theme.buttonColor }]} />
-        ) : highlight ? (
-          <View style={styles.inCartPill} />
-        ) : null}
-
-        {qtyBadge}
-
-        <View style={styles.menuCardHeader}>
-          <Text style={[styles.menuCardName, { color: theme.textColor }]} numberOfLines={2}>
-            {item.name}
-          </Text>
-          <View style={styles.badgeGroup}>{badges}</View>
-        </View>
-
-        <Text style={styles.menuCardMeta} numberOfLines={2}>
-          {formatItemMetaLine(item)}
-        </Text>
-
-        <View style={styles.menuCardFooter}>
-          <Text style={[styles.menuPrice, { color: theme.buttonColor }]}>
-            {priceLabel}
-          </Text>
-        </View>
-      </Pressable>
-    );
-  }, [menuListView, theme.buttonColor, theme.filterSortColor, theme.textColor, t, styles, cartQtyByItemId]);
+  const renderMenuItem = useCallback(
+    ({ item }) => (
+      <BillingMenuListItem
+        item={item}
+        menuListView={menuListView}
+        onPress={handleMenuItemPress}
+        theme={menuTheme}
+        styles={styles}
+        t={t}
+        formatItemMetaLine={formatItemMetaLine}
+      />
+    ),
+    [menuListView, menuTheme, handleMenuItemPress, styles, t, formatItemMetaLine]
+  );
 
   const renderCartItem = (item) => (
     <View
@@ -712,6 +605,10 @@ export default function BillingScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.menuList}
               keyboardShouldPersistTaps="handled"
+              initialNumToRender={12}
+              maxToRenderPerBatch={8}
+              windowSize={7}
+              removeClippedSubviews={Platform.OS !== 'web'}
             />
           )}
         </View>
@@ -874,15 +771,53 @@ export default function BillingScreen() {
                     {formatCurrency(taxBreakdown.total)}
                   </Text>
                 </View>
+                {enableDueOrders !== false && cart.length > 0 ? (
+                  <TouchableOpacity
+                    style={styles.dueCheckRow}
+                    onPress={() => {
+                      setBillDue((prev) => {
+                        const next = !prev;
+                        if (next) setBillPaid(false);
+                        return next;
+                      });
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <View
+                      style={[
+                        styles.dueCheckbox,
+                        billDue && {
+                          backgroundColor: theme.buttonColor,
+                          borderColor: theme.buttonColor,
+                        },
+                      ]}
+                    >
+                      {billDue ? (
+                        <Text style={styles.dueCheckboxMark}>✓</Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.dueCheckCopy}>
+                      <Text style={styles.dueCheckLabel}>{t('dueOrderLabel')}</Text>
+                      <Text style={styles.dueCheckHint}>{t('dueOrderHint')}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : null}
                 <View style={styles.billActionRow}>
                   <TouchableOpacity
                     style={[
                       styles.paidBtn,
                       billPaid && styles.paidBtnActive,
                       cart.length === 0 && styles.paidBtnDisabled,
+                      billDue && styles.paidBtnDisabled,
                     ]}
-                    onPress={() => setBillPaid((prev) => !prev)}
-                    disabled={cart.length === 0}
+                    onPress={() => {
+                      setBillPaid((prev) => {
+                        const next = !prev;
+                        if (next) setBillDue(false);
+                        return next;
+                      });
+                    }}
+                    disabled={cart.length === 0 || billDue}
                   >
                     <Text style={[styles.paidBtnText, billPaid && styles.paidBtnTextActive]}>
                       {billPaid ? t('paidCheck') : t('markPaid')}
@@ -1693,6 +1628,42 @@ function createStyles(ui) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  dueCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 12,
+    paddingVertical: 4,
+  },
+  dueCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: ui.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  dueCheckboxMark: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  dueCheckCopy: {
+    flex: 1,
+  },
+  dueCheckLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: ui.textPrimary,
+  },
+  dueCheckHint: {
+    fontSize: 12,
+    color: ui.textMuted,
+    marginTop: 2,
+    lineHeight: 16,
   },
   billTaxLine: {
     fontSize: 12,
