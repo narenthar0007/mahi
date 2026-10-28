@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,10 +15,10 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import useStore from '../store/store';
 import ItemConfigModal from '../components/ItemConfigModal';
+import BillingMenuListItem from '../components/BillingMenuListItem';
 import ConfirmModal from '../components/ConfirmModal';
 import { formatCurrency } from '../utils/currency';
 import { confirmAction, showAlert } from '../utils/alert';
@@ -42,8 +42,7 @@ import { useTranslation } from '../utils/i18n';
 import { floatingBar, shadow, useThemedStyles } from '../utils/uiTheme';
 import { useResponsiveLayout } from '../utils/responsive';
 import { TABLE_COLORS } from '../utils/tableManagement';
-
-const BOTTOM_BAR_HEIGHT = 64;
+import AppEmptyState from '../components/ui/AppEmptyState';
 
 export default function BillingScreen() {
   const { ui, styles } = useThemedStyles(createStyles);
@@ -53,8 +52,9 @@ export default function BillingScreen() {
   const addToCart = useStore((s) => s.addToCart);
   const removeFromCart = useStore((s) => s.removeFromCart);
   const updateCartItemQuantity = useStore((s) => s.updateCartItemQuantity);
+  const updateCartItemNote = useStore((s) => s.updateCartItemNote);
   const checkout = useStore((s) => s.checkout);
-  const getCartTotal = useStore((s) => s.getCartTotal);
+  const history = useStore((s) => s.history);
   const tables = useStore((s) => s.tables);
   const activeTableId = useStore((s) => s.activeTableId);
   const clearActiveTable = useStore((s) => s.clearActiveTable);
@@ -66,29 +66,17 @@ export default function BillingScreen() {
   const includeWebsitesInWhatsApp = useStore((s) => s.includeWebsitesInWhatsApp);
   const upiQrUri = useStore((s) => s.upiQrUri);
   const showWhatsAppInvoiceButtons = useStore((s) => s.showWhatsAppInvoiceButtons);
+  const enableDueOrders = useStore((s) => s.enableDueOrders);
   const shopOffer = useStore((s) => s.shopOffer);
   const menuListView = useStore((s) => s.menuListView);
   const setMenuListView = useStore((s) => s.setMenuListView);
   const theme = useAppTheme();
-  const tabBarHeight = useBottomTabBarHeight();
-  const stickyTabBarHeightRef = useRef(tabBarHeight);
-  if (tabBarHeight > stickyTabBarHeightRef.current) {
-    stickyTabBarHeightRef.current = tabBarHeight;
-  }
-  const stableTabBarHeight = Math.max(
-    tabBarHeight,
-    stickyTabBarHeightRef.current
-  );
   const { menuColumns, isNarrow, scaledSize, horizontalPad } = useResponsiveLayout();
-  const listBottomPad = stableTabBarHeight + BOTTOM_BAR_HEIGHT + 16;
-  const bottomBarStyle = useMemo(
-    () => ({ bottom: stableTabBarHeight + 8 }),
-    [stableTabBarHeight]
-  );
 
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [customerPhone, setCustomerPhone] = useState('');
+  const [orderNote, setOrderNote] = useState('');
   const [checkoutConfirmVisible, setCheckoutConfirmVisible] = useState(false);
   const [offerConfirmVisible, setOfferConfirmVisible] = useState(false);
   const [checkoutOfferApplied, setCheckoutOfferApplied] = useState(false);
@@ -99,6 +87,7 @@ export default function BillingScreen() {
   const [billVisible, setBillVisible] = useState(false);
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [billPaid, setBillPaid] = useState(false);
+  const [billDue, setBillDue] = useState(false);
   const [upiCheckout, setUpiCheckout] = useState(null);
   const [sharingUpiQr, setSharingUpiQr] = useState(false);
 
@@ -125,7 +114,14 @@ export default function BillingScreen() {
     [activeInventory, searchQuery, sortBy]
   );
 
-  const cartTotal = getCartTotal();
+  const cartTotal = useMemo(
+    () =>
+      cart.reduce(
+        (sum, line) => sum + (Number(line?.totalPrice) || 0),
+        0
+      ),
+    [cart]
+  );
   const taxBreakdown = useMemo(
     () => calculateBillTotals(cartTotal, { taxEnabled, shopOffer, offerApplied: false }),
     [cartTotal, taxEnabled, shopOffer]
@@ -164,44 +160,29 @@ export default function BillingScreen() {
     setCustomerPhone(sanitizeCustomerPhoneInput(phone));
   }, [activeTableId, activeTable?.guestPhone]);
 
-  const handleMenuItemPress = (item) => {
-    const needsModal =
-      (item.variants?.length ?? 0) > 0 ||
-      (item.addons?.length ?? 0) > 0 ||
-      Boolean(item.isWeightBased) ||
-      Boolean(item.isVariablePrice);
-    if (needsModal) {
-      setSelectedItem(item);
-      setModalVisible(true);
-    } else {
-      addToCart(item, null, [], 1);
+  // Resume running table order note into the bill panel.
+  useEffect(() => {
+    if (!activeTable?.currentOrderId) {
+      return;
     }
-  };
+    const order =
+      (history || []).find(
+        (entry) =>
+          entry &&
+          (entry.id === activeTable.currentOrderId ||
+            entry.orderId === activeTable.currentOrderId)
+      ) || null;
+    setOrderNote(order?.orderNote || '');
+  }, [activeTableId, activeTable?.currentOrderId, history]);
+
+  const handleMenuItemPress = useCallback((item) => {
+    // Always open config so staff can add an item note (and variants/add-ons).
+    setSelectedItem(item);
+    setModalVisible(true);
+  }, []);
 
   const handleAddToCart = (item, selectedVariant, selectedAddons, quantity = 1, options = {}) => {
     addToCart(item, selectedVariant, selectedAddons, quantity, options);
-  };
-
-  const getMenuItemHighlight = (item) => {
-    if (item.isWeightBased && item.isVariablePrice) {
-      return {
-        backgroundColor: 'rgba(255, 213, 79, 0.28)',
-        borderColor: 'rgba(30, 136, 229, 0.55)',
-      };
-    }
-    if (item.isWeightBased) {
-      return {
-        backgroundColor: 'rgba(255, 213, 79, 0.32)',
-        borderColor: 'rgba(245, 180, 0, 0.5)',
-      };
-    }
-    if (item.isVariablePrice) {
-      return {
-        backgroundColor: 'rgba(66, 165, 245, 0.28)',
-        borderColor: 'rgba(30, 136, 229, 0.5)',
-      };
-    }
-    return null;
   };
 
   const formatQuantityLabel = (cartItem) => {
@@ -231,8 +212,10 @@ export default function BillingScreen() {
       const order = checkout(phone, {
         taxEnabled,
         isPaid: billPaid,
+        isDue: Boolean(enableDueOrders) && billDue,
         offerApplied,
         tableId: activeTableId || null,
+        orderNote,
       });
       if (!order) {
         showAlert(t('checkoutFailed'), t('checkoutFailedMsg'));
@@ -241,8 +224,10 @@ export default function BillingScreen() {
 
       const checkoutPhone = phone;
       setCustomerPhone('');
+      setOrderNote('');
       setTaxEnabled(false);
       setBillPaid(false);
+      setBillDue(false);
       setCheckoutOfferApplied(false);
       clearActiveTable();
 
@@ -284,6 +269,7 @@ export default function BillingScreen() {
             isTableOrder: order.isTableOrder,
             tableNumber: order.tableNumber,
             isPaid: order.isPaid,
+            orderNote: order.orderNote || '',
           });
           setSuccessMessage(
             order.isTableOrder
@@ -368,109 +354,46 @@ export default function BillingScreen() {
     return parts.join(' · ');
   };
 
-  const formatItemMetaLine = (item) => {
-    const parts = [];
-    if (item.itemNumber) {
-      parts.push(`${t('menuId')} ${item.itemNumber}`);
-    }
-    if (item.variants?.length > 0) {
-      parts.push(t('variantsBadge', { count: item.variants.length }));
-    }
-    if (item.addons?.length > 0) {
-      parts.push(t('addonsBadge', { count: item.addons.length }));
-    }
-    return parts.join(' · ');
-  };
+  const formatItemMetaLine = useCallback(
+    (item) => {
+      const parts = [];
+      if (item.itemNumber) {
+        parts.push(`${t('menuId')} ${item.itemNumber}`);
+      }
+      if (item.variants?.length > 0) {
+        parts.push(t('variantsBadge', { count: item.variants.length }));
+      }
+      if (item.addons?.length > 0) {
+        parts.push(t('addonsBadge', { count: item.addons.length }));
+      }
+      return parts.join(' · ');
+    },
+    [t]
+  );
 
-  const renderMenuItem = useCallback(({ item }) => {
-    const highlight = getMenuItemHighlight(item);
-    const priceLabel = item.isVariablePrice
-      ? t('variablePriceShort')
-      : `${formatCurrency(item.basePrice ?? 0)}${item.isWeightBased && item.unit ? `/${item.unit}` : ''}`;
+  const menuTheme = useMemo(
+    () => ({
+      buttonColor: theme.buttonColor,
+      filterSortColor: theme.filterSortColor,
+      textColor: theme.textColor,
+    }),
+    [theme.buttonColor, theme.filterSortColor, theme.textColor]
+  );
 
-    const badges = (
-      <>
-        {item.isWeightBased ? (
-          <View style={[styles.menuListBadge, { backgroundColor: 'rgba(245, 180, 0, 0.22)' }]}>
-            <Text style={[styles.menuListBadgeText, { color: '#b8860b' }]}>w</Text>
-          </View>
-        ) : null}
-        {item.isVariablePrice ? (
-          <View style={[styles.menuListBadge, { backgroundColor: 'rgba(30, 136, 229, 0.18)' }]}>
-            <Text style={[styles.menuListBadgeText, { color: '#1565c0' }]}>₹</Text>
-          </View>
-        ) : null}
-        {(item.variants?.length ?? 0) > 0 ? (
-          <View style={[styles.menuListBadge, { backgroundColor: `${theme.buttonColor}18` }]}>
-            <Text style={[styles.menuListBadgeText, { color: theme.buttonColor }]}>v</Text>
-          </View>
-        ) : null}
-        {(item.addons?.length ?? 0) > 0 ? (
-          <View style={[styles.menuListBadge, { backgroundColor: `${theme.filterSortColor}18` }]}>
-            <Text style={[styles.menuListBadgeText, { color: theme.filterSortColor }]}>a</Text>
-          </View>
-        ) : null}
-      </>
-    );
-
-    if (menuListView) {
-      return (
-        <Pressable
-          style={({ pressed }) => [
-            styles.menuRowItem,
-            highlight && styles.menuRowItemHighlight,
-            pressed && styles.menuRowItemPressed,
-          ]}
-          onPress={() => handleMenuItemPress(item)}
-        >
-          <View style={styles.menuRowMain}>
-            <View style={styles.menuRowTitleLine}>
-              <Text style={[styles.menuRowName, { color: theme.textColor }]} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <View style={styles.badgeGroup}>{badges}</View>
-            </View>
-            <Text style={styles.menuRowMeta} numberOfLines={1}>
-              {formatItemMetaLine(item)}
-            </Text>
-          </View>
-          <Text style={[styles.menuRowPrice, { color: theme.buttonColor }]}>{priceLabel}</Text>
-        </Pressable>
-      );
-    }
-
-    return (
-      <Pressable
-        style={({ pressed }) => [
-          styles.menuCard,
-          highlight && styles.menuCardHighlight,
-          pressed && styles.menuCardPressed,
-        ]}
-        onPress={() => handleMenuItemPress(item)}
-      >
-        {highlight ? (
-          <View style={styles.inCartPill} />
-        ) : null}
-
-        <View style={styles.menuCardHeader}>
-          <Text style={[styles.menuCardName, { color: theme.textColor }]} numberOfLines={2}>
-            {item.name}
-          </Text>
-          <View style={styles.badgeGroup}>{badges}</View>
-        </View>
-
-        <Text style={styles.menuCardMeta} numberOfLines={2}>
-          {formatItemMetaLine(item)}
-        </Text>
-
-        <View style={styles.menuCardFooter}>
-          <Text style={[styles.menuPrice, { color: theme.buttonColor }]}>
-            {priceLabel}
-          </Text>
-        </View>
-      </Pressable>
-    );
-  }, [menuListView, theme.buttonColor, theme.filterSortColor, theme.textColor, t, styles]);
+  const renderMenuItem = useCallback(
+    ({ item }) => (
+      <BillingMenuListItem
+        item={item}
+        menuListView={menuListView}
+        onPress={handleMenuItemPress}
+        theme={menuTheme}
+        styles={styles}
+        t={t}
+        formatItemMetaLine={formatItemMetaLine}
+      />
+    ),
+    [menuListView, menuTheme, handleMenuItemPress, styles, t, formatItemMetaLine]
+  );
 
   const renderCartItem = (item) => (
     <View
@@ -487,6 +410,14 @@ export default function BillingScreen() {
           {formatCurrency(item.unitPrice)}
           {item.isWeightBased && item.unit ? `/${item.unit}` : ''} × {formatQuantityLabel(item)}
         </Text>
+        <TextInput
+          style={styles.itemNoteInput}
+          value={item.note || ''}
+          onChangeText={(value) => updateCartItemNote(item.id, value)}
+          placeholder={t('itemNotePlaceholder')}
+          placeholderTextColor={ui.textMuted}
+          maxLength={120}
+        />
       </View>
       <View style={styles.cartRight}>
         <Text style={[styles.cartTotal, { color: theme.textColor }]}>
@@ -519,7 +450,7 @@ export default function BillingScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={[]}>
       <View style={styles.container}>
-        <View style={[styles.menuSection, { paddingHorizontal: horizontalPad, paddingBottom: listBottomPad }]}>
+        <View style={[styles.menuSection, { paddingHorizontal: horizontalPad }]}>
           <View style={styles.menuHeaderRow}>
             <View style={styles.menuHeaderLeft}>
               <Text
@@ -638,20 +569,29 @@ export default function BillingScreen() {
           )}
 
           {inventory.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>{t('noItemsYet')}</Text>
-              <Text style={styles.emptySubtext}>{t('noItemsYetHint')}</Text>
-            </View>
+            <AppEmptyState
+              icon="restaurant-outline"
+              title={t('noItemsYet')}
+              subtitle={t('noItemsYetHint')}
+              accentColor={theme.buttonColor}
+              style={styles.emptyBox}
+            />
           ) : activeInventory.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>{t('noActiveItems')}</Text>
-              <Text style={styles.emptySubtext}>{t('noActiveItemsHint')}</Text>
-            </View>
+            <AppEmptyState
+              icon="restaurant-outline"
+              title={t('noActiveItems')}
+              subtitle={t('noActiveItemsHint')}
+              accentColor={theme.buttonColor}
+              style={styles.emptyBox}
+            />
           ) : filteredInventory.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>{t('noMatchingItems')}</Text>
-              <Text style={styles.emptySubtext}>{t('noMatchingHint')}</Text>
-            </View>
+            <AppEmptyState
+              icon="search-outline"
+              title={t('noMatchingItems')}
+              subtitle={t('noMatchingHint')}
+              accentColor={theme.buttonColor}
+              style={styles.emptyBox}
+            />
           ) : (
             <FlatList
               // React Native requires a remount when numColumns changes. Keep this key
@@ -665,12 +605,15 @@ export default function BillingScreen() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.menuList}
               keyboardShouldPersistTaps="handled"
+              initialNumToRender={12}
+              maxToRenderPerBatch={8}
+              windowSize={7}
+              removeClippedSubviews={Platform.OS !== 'web'}
             />
           )}
         </View>
-      </View>
 
-      <View style={[styles.bottomBar, floatingBar(ui), bottomBarStyle]}>
+      <View style={[styles.bottomBar, floatingBar(ui)]}>
         <TouchableOpacity
           style={[
             styles.cartIconBtn,
@@ -707,6 +650,7 @@ export default function BillingScreen() {
         >
           <Text style={styles.checkoutText}>{isCheckingOut ? t('processing') : t('checkout')}</Text>
         </Pressable>
+      </View>
       </View>
 
       <Modal visible={billVisible} transparent animationType="slide" onRequestClose={() => setBillVisible(false)}>
@@ -746,9 +690,12 @@ export default function BillingScreen() {
                 nestedScrollEnabled
               >
                 {cart.length === 0 ? (
-                  <View style={styles.emptyCart}>
-                    <Text style={styles.emptyCartText}>{t('emptyCartTitle')}</Text>
-                  </View>
+                  <AppEmptyState
+                    icon="cart-outline"
+                    title={t('emptyCartTitle')}
+                    accentColor={theme.buttonColor}
+                    style={styles.emptyCart}
+                  />
                 ) : (
                   cart.map((item) => renderCartItem(item))
                 )}
@@ -779,9 +726,20 @@ export default function BillingScreen() {
                       value={customerPhone}
                       onChangeText={(value) => setCustomerPhone(sanitizeCustomerPhoneInput(value))}
                       placeholder={t('phoneExamplePlaceholder')}
-                      placeholderTextColor="#adb5bd"
+                      placeholderTextColor={ui.textMuted}
                       keyboardType="phone-pad"
                       maxLength={CUSTOMER_PHONE_MAX_LENGTH}
+                    />
+
+                    <Text style={styles.customerLabel}>{t('orderNote')}</Text>
+                    <TextInput
+                      style={[styles.customerInput, styles.orderNoteInput]}
+                      value={orderNote}
+                      onChangeText={setOrderNote}
+                      placeholder={t('orderNotePlaceholder')}
+                      placeholderTextColor={ui.textMuted}
+                      multiline
+                      maxLength={200}
                     />
                   </View>
                 ) : null}
@@ -813,15 +771,53 @@ export default function BillingScreen() {
                     {formatCurrency(taxBreakdown.total)}
                   </Text>
                 </View>
+                {enableDueOrders !== false && cart.length > 0 ? (
+                  <TouchableOpacity
+                    style={styles.dueCheckRow}
+                    onPress={() => {
+                      setBillDue((prev) => {
+                        const next = !prev;
+                        if (next) setBillPaid(false);
+                        return next;
+                      });
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <View
+                      style={[
+                        styles.dueCheckbox,
+                        billDue && {
+                          backgroundColor: theme.buttonColor,
+                          borderColor: theme.buttonColor,
+                        },
+                      ]}
+                    >
+                      {billDue ? (
+                        <Text style={styles.dueCheckboxMark}>✓</Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.dueCheckCopy}>
+                      <Text style={styles.dueCheckLabel}>{t('dueOrderLabel')}</Text>
+                      <Text style={styles.dueCheckHint}>{t('dueOrderHint')}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : null}
                 <View style={styles.billActionRow}>
                   <TouchableOpacity
                     style={[
                       styles.paidBtn,
                       billPaid && styles.paidBtnActive,
                       cart.length === 0 && styles.paidBtnDisabled,
+                      billDue && styles.paidBtnDisabled,
                     ]}
-                    onPress={() => setBillPaid((prev) => !prev)}
-                    disabled={cart.length === 0}
+                    onPress={() => {
+                      setBillPaid((prev) => {
+                        const next = !prev;
+                        if (next) setBillDue(false);
+                        return next;
+                      });
+                    }}
+                    disabled={cart.length === 0 || billDue}
                   >
                     <Text style={[styles.paidBtnText, billPaid && styles.paidBtnTextActive]}>
                       {billPaid ? t('paidCheck') : t('markPaid')}
@@ -960,7 +956,7 @@ export default function BillingScreen() {
 function createStyles(ui) {
   return {
   safe: { flex: 1, backgroundColor: ui.bg },
-  container: { flex: 1, minHeight: 0 },
+  container: { flex: 1, minHeight: 0, backgroundColor: ui.bg },
   menuSection: {
     flex: 1,
     minHeight: 0,
@@ -1030,12 +1026,12 @@ function createStyles(ui) {
     color: ui.textMuted,
   },
   bottomBar: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginHorizontal: 14,
+    marginBottom: 8,
+    marginTop: 4,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -1056,8 +1052,9 @@ function createStyles(ui) {
     minWidth: 20,
     height: 20,
     paddingHorizontal: 5,
-    borderRadius: 10,
-    backgroundColor: '#e94560',
+    borderRadius: ui.radiusSm,
+    // backgroundColor via theme.buttonColor at call site
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -1139,7 +1136,7 @@ function createStyles(ui) {
   billClose: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#e94560',
+    // color via theme.buttonColor at call site
   },
   billShopMeta: {
     paddingHorizontal: 4,
@@ -1148,7 +1145,7 @@ function createStyles(ui) {
   },
   billMetaLine: {
     fontSize: 12,
-    color: '#495057',
+    color: ui.textSecondary,
     fontWeight: '600',
   },
   billBody: { flex: 1, minHeight: 140 },
@@ -1160,7 +1157,7 @@ function createStyles(ui) {
     marginBottom: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: ui.radiusSm,
     borderWidth: 1,
     borderColor: ui.border,
     backgroundColor: ui.surfaceMuted,
@@ -1168,7 +1165,7 @@ function createStyles(ui) {
   taxBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#495057',
+    color: ui.textSecondary,
     textAlign: 'center',
   },
   taxBtnTextActive: {
@@ -1227,8 +1224,7 @@ function createStyles(ui) {
     opacity: 0.85,
   },
   sortChipActive: {
-    backgroundColor: '#e94560',
-    borderColor: '#e94560',
+    // colors via theme.filterSortColor at call sites
   },
   sortChipText: {
     fontSize: 12,
@@ -1242,6 +1238,7 @@ function createStyles(ui) {
   menuRow: { gap: 8 },
   menuCard: {
     flex: 1,
+    position: 'relative',
     backgroundColor: ui.surface,
     borderRadius: ui.radiusMd,
     paddingVertical: 12,
@@ -1293,6 +1290,44 @@ function createStyles(ui) {
     borderTopLeftRadius: ui.radiusMd,
     borderTopRightRadius: ui.radiusMd,
     backgroundColor: ui.info,
+  },
+  cartQtyBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  cartQtyBadgeInline: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartQtyBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  menuRowTrailing: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  menuRowItemInCart: {
+    borderColor: ui.info,
+    backgroundColor: 'rgba(59, 130, 246, 0.08)',
+  },
+  menuCardInCart: {
+    borderColor: ui.info,
   },
   badgeGroup: {
     flexDirection: 'row',
@@ -1423,7 +1458,7 @@ function createStyles(ui) {
   menuListBadge: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: ui.radiusSm,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1441,23 +1476,7 @@ function createStyles(ui) {
   },
   emptyBox: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
     marginTop: 24,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: ui.textSecondary,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: ui.textMuted,
-    marginTop: 6,
-    textAlign: 'center',
-    lineHeight: 20,
   },
   cartList: { flex: 1 },
   cartListContent: { paddingBottom: 4 },
@@ -1466,19 +1485,19 @@ function createStyles(ui) {
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f3f5',
+    borderBottomColor: ui.surfaceMuted,
   },
   cartRowWeight: {
     backgroundColor: 'rgba(255, 213, 79, 0.14)',
     marginHorizontal: -8,
     paddingHorizontal: 8,
-    borderRadius: 8,
+    borderRadius: ui.radiusSm,
   },
   cartRowVariable: {
     backgroundColor: 'rgba(66, 165, 245, 0.12)',
     marginHorizontal: -8,
     paddingHorizontal: 8,
-    borderRadius: 8,
+    borderRadius: ui.radiusSm,
   },
   cartInfo: { flex: 1, paddingRight: 8 },
   cartName: {
@@ -1488,8 +1507,19 @@ function createStyles(ui) {
   },
   cartUnit: {
     fontSize: 12,
-    color: '#868e96',
+    color: ui.textMuted,
     marginTop: 2,
+  },
+  itemNoteInput: {
+    marginTop: 6,
+    backgroundColor: ui.surfaceMuted,
+    borderWidth: 1,
+    borderColor: ui.borderLight,
+    borderRadius: ui.radiusSm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 12,
+    color: ui.textPrimary,
   },
   cartRight: { alignItems: 'flex-end' },
   cartTotal: {
@@ -1512,8 +1542,8 @@ function createStyles(ui) {
   qtyBtn: {
     width: 30,
     height: 30,
-    borderRadius: 8,
-    backgroundColor: '#f1f3f5',
+    borderRadius: ui.radiusSm,
+    backgroundColor: ui.surfaceMuted,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1533,20 +1563,12 @@ function createStyles(ui) {
     color: ui.textPrimary,
   },
   emptyCart: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  emptyCartText: {
-    fontSize: 15,
-    color: ui.textMuted,
-    fontWeight: '600',
+    paddingVertical: 16,
   },
   customerLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#495057',
+    color: ui.textSecondary,
     marginTop: 8,
     marginBottom: 6,
   },
@@ -1554,19 +1576,23 @@ function createStyles(ui) {
     backgroundColor: ui.surfaceMuted,
     borderWidth: 1,
     borderColor: ui.borderLight,
-    borderRadius: 10,
+    borderRadius: ui.radiusSm,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 16,
     color: ui.textPrimary,
     marginBottom: 4,
   },
+  orderNoteInput: {
+    minHeight: 64,
+    textAlignVertical: 'top',
+  },
   paidBtn: {
     flex: 1,
-    backgroundColor: '#f1f3f5',
+    backgroundColor: ui.surfaceMuted,
     paddingVertical: 14,
     paddingHorizontal: 10,
-    borderRadius: 12,
+    borderRadius: ui.radiusMd,
     borderWidth: 1,
     borderColor: ui.border,
     alignItems: 'center',
@@ -1580,7 +1606,7 @@ function createStyles(ui) {
     borderColor: 'rgba(40, 167, 69, 0.5)',
   },
   paidBtnText: {
-    color: '#495057',
+    color: ui.textSecondary,
     fontSize: 13,
     fontWeight: '800',
   },
@@ -1591,7 +1617,7 @@ function createStyles(ui) {
     flexShrink: 0,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
+    borderTopColor: ui.border,
     backgroundColor: ui.surface,
     marginTop: 8,
   },
@@ -1603,14 +1629,50 @@ function createStyles(ui) {
     alignItems: 'center',
     gap: 10,
   },
+  dueCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 12,
+    paddingVertical: 4,
+  },
+  dueCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: ui.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  dueCheckboxMark: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  dueCheckCopy: {
+    flex: 1,
+  },
+  dueCheckLabel: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: ui.textPrimary,
+  },
+  dueCheckHint: {
+    fontSize: 12,
+    color: ui.textMuted,
+    marginTop: 2,
+    lineHeight: 16,
+  },
   billTaxLine: {
     fontSize: 12,
-    color: '#868e96',
+    color: ui.textMuted,
     marginBottom: 2,
   },
   billLabel: {
     fontSize: 13,
-    color: '#868e96',
+    color: ui.textMuted,
   },
   billAmount: {
     fontSize: 26,
@@ -1622,7 +1684,7 @@ function createStyles(ui) {
     maxWidth: 380,
     alignSelf: 'center',
     backgroundColor: ui.surface,
-    borderRadius: 16,
+    borderRadius: ui.radiusLg,
     padding: 18,
     margin: 24,
   },
@@ -1634,7 +1696,7 @@ function createStyles(ui) {
   phonePromptSub: {
     marginTop: 6,
     fontSize: 13,
-    color: '#6c757d',
+    color: ui.textSecondary,
     lineHeight: 18,
   },
   phonePromptInput: {
@@ -1642,7 +1704,7 @@ function createStyles(ui) {
     backgroundColor: ui.surfaceMuted,
     borderWidth: 1,
     borderColor: ui.borderLight,
-    borderRadius: 10,
+    borderRadius: ui.radiusSm,
     paddingHorizontal: 14,
     paddingVertical: 10,
     fontSize: 16,
@@ -1655,19 +1717,19 @@ function createStyles(ui) {
   },
   phonePromptSkip: {
     flex: 1,
-    backgroundColor: '#f1f3f5',
-    borderRadius: 10,
+    backgroundColor: ui.surfaceMuted,
+    borderRadius: ui.radiusSm,
     paddingVertical: 12,
     alignItems: 'center',
   },
   phonePromptSkipText: {
-    color: '#495057',
+    color: ui.textSecondary,
     fontWeight: '800',
   },
   phonePromptOk: {
     flex: 1,
     backgroundColor: ui.textPrimary,
-    borderRadius: 10,
+    borderRadius: ui.radiusSm,
     paddingVertical: 12,
     alignItems: 'center',
   },
@@ -1719,7 +1781,7 @@ function createStyles(ui) {
     padding: 20,
   },
   upiCard: {
-    borderRadius: 16,
+    borderRadius: ui.radiusLg,
     padding: 20,
     alignItems: 'center',
     gap: 10,
@@ -1740,7 +1802,7 @@ function createStyles(ui) {
   },
   upiShareBtn: {
     marginTop: 8,
-    borderRadius: 10,
+    borderRadius: ui.radiusSm,
     paddingVertical: 12,
     paddingHorizontal: 18,
     width: '100%',

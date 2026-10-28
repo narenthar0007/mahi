@@ -75,6 +75,7 @@ export default function ShopSettingsModal({
   const storedEnableTables = useStore((s) => s.enableTables);
   const storedEnableWeightBasedPricing = useStore((s) => s.enableWeightBasedPricing);
   const storedEnableVariablePriceItems = useStore((s) => s.enableVariablePriceItems);
+  const storedEnableDueOrders = useStore((s) => s.enableDueOrders);
   const storedShopOffer = useStore((s) => s.shopOffer);
   const storedShopWebsite = useStore((s) => s.shopWebsite);
   const storedMenuWebsite = useStore((s) => s.menuWebsite);
@@ -109,6 +110,7 @@ export default function ShopSettingsModal({
   const [enableVariablePriceItems, setEnableVariablePriceItems] = useState(
     Boolean(storedEnableVariablePriceItems)
   );
+  const [enableDueOrders, setEnableDueOrders] = useState(Boolean(storedEnableDueOrders));
   const [offerEnabled, setOfferEnabled] = useState(false);
   const [offerName, setOfferName] = useState('');
   const [offerType, setOfferType] = useState('percent');
@@ -143,6 +145,7 @@ export default function ShopSettingsModal({
     setEnableTables(storedEnableTables !== false);
     setEnableWeightBasedPricing(Boolean(storedEnableWeightBasedPricing));
     setEnableVariablePriceItems(Boolean(storedEnableVariablePriceItems));
+    setEnableDueOrders(Boolean(storedEnableDueOrders));
     const normalizedOffer = normalizeShopOffer(storedShopOffer);
     setOfferEnabled(normalizedOffer.enabled);
     setOfferName(normalizedOffer.name);
@@ -300,6 +303,7 @@ export default function ShopSettingsModal({
       enableTables,
       enableWeightBasedPricing,
       enableVariablePriceItems,
+      enableDueOrders,
       shopWebsite: shopWebsite.trim(),
       menuWebsite: menuWebsite.trim(),
       includeWebsitesInWhatsApp,
@@ -397,6 +401,7 @@ export default function ShopSettingsModal({
         setEnableTables(state.enableTables !== false);
         setEnableWeightBasedPricing(Boolean(state.enableWeightBasedPricing));
         setEnableVariablePriceItems(Boolean(state.enableVariablePriceItems));
+        setEnableDueOrders(Boolean(state.enableDueOrders));
         setShopWebsite(state.shopWebsite || '');
         setMenuWebsite(state.menuWebsite || '');
         setIncludeWebsitesInWhatsApp(Boolean(state.includeWebsitesInWhatsApp));
@@ -531,8 +536,8 @@ export default function ShopSettingsModal({
               <Switch
                 value={includeWebsitesInWhatsApp}
                 onValueChange={setIncludeWebsitesInWhatsApp}
-                trackColor={{ false: '#dee2e6', true: `${previewTheme.buttonColor}88` }}
-                thumbColor={includeWebsitesInWhatsApp ? previewTheme.buttonColor : '#f8f9fa'}
+                trackColor={{ false: ui.border, true: `${previewTheme.buttonColor}88` }}
+                thumbColor={includeWebsitesInWhatsApp ? previewTheme.buttonColor : ui.surfaceMuted}
               />
             </View>
 
@@ -600,8 +605,21 @@ export default function ShopSettingsModal({
               <Switch
                 value={showWhatsAppInvoiceButtons}
                 onValueChange={setShowWhatsAppInvoiceButtons}
-                trackColor={{ false: '#dee2e6', true: `${previewTheme.buttonColor}88` }}
-                thumbColor={showWhatsAppInvoiceButtons ? previewTheme.buttonColor : '#f8f9fa'}
+                trackColor={{ false: ui.border, true: `${previewTheme.buttonColor}88` }}
+                thumbColor={showWhatsAppInvoiceButtons ? previewTheme.buttonColor : ui.surfaceMuted}
+              />
+            </View>
+
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleCopy}>
+                <Text style={styles.toggleLabel}>{t('enableDueOrders')}</Text>
+                <Text style={styles.hint}>{t('enableDueOrdersHint')}</Text>
+              </View>
+              <Switch
+                value={enableDueOrders}
+                onValueChange={setEnableDueOrders}
+                trackColor={{ false: ui.border, true: `${previewTheme.buttonColor}88` }}
+                thumbColor={enableDueOrders ? previewTheme.buttonColor : ui.surfaceMuted}
               />
             </View>
 
@@ -618,8 +636,8 @@ export default function ShopSettingsModal({
                   // Apply immediately so hamburger shows/hides Table Booker, Tables, Sync.
                   updateShopSettings({ enableTables: value });
                 }}
-                trackColor={{ false: '#dee2e6', true: `${previewTheme.buttonColor}88` }}
-                thumbColor={enableTables ? previewTheme.buttonColor : '#f8f9fa'}
+                trackColor={{ false: ui.border, true: `${previewTheme.buttonColor}88` }}
+                thumbColor={enableTables ? previewTheme.buttonColor : ui.surfaceMuted}
               />
             </View>
 
@@ -633,8 +651,8 @@ export default function ShopSettingsModal({
               <Switch
                 value={enableWeightBasedPricing}
                 onValueChange={setEnableWeightBasedPricing}
-                trackColor={{ false: '#dee2e6', true: `${previewTheme.buttonColor}88` }}
-                thumbColor={enableWeightBasedPricing ? previewTheme.buttonColor : '#f8f9fa'}
+                trackColor={{ false: ui.border, true: `${previewTheme.buttonColor}88` }}
+                thumbColor={enableWeightBasedPricing ? previewTheme.buttonColor : ui.surfaceMuted}
               />
             </View>
             <View style={styles.toggleRow}>
@@ -645,8 +663,8 @@ export default function ShopSettingsModal({
               <Switch
                 value={enableVariablePriceItems}
                 onValueChange={setEnableVariablePriceItems}
-                trackColor={{ false: '#dee2e6', true: `${previewTheme.buttonColor}88` }}
-                thumbColor={enableVariablePriceItems ? previewTheme.buttonColor : '#f8f9fa'}
+                trackColor={{ false: ui.border, true: `${previewTheme.buttonColor}88` }}
+                thumbColor={enableVariablePriceItems ? previewTheme.buttonColor : ui.surfaceMuted}
               />
             </View>
 
@@ -753,8 +771,8 @@ export default function ShopSettingsModal({
               <Switch
                 value={offerEnabled}
                 onValueChange={setOfferEnabled}
-                trackColor={{ false: '#dee2e6', true: `${previewTheme.buttonColor}88` }}
-                thumbColor={offerEnabled ? previewTheme.buttonColor : '#f8f9fa'}
+                trackColor={{ false: ui.border, true: `${previewTheme.buttonColor}88` }}
+                thumbColor={offerEnabled ? previewTheme.buttonColor : ui.surfaceMuted}
               />
             </View>
             {offerEnabled ? (
@@ -1023,7 +1041,7 @@ function createStyles(ui) {
   label: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#495057',
+    color: ui.textSecondary,
     marginBottom: 6,
     marginTop: 8,
   },
@@ -1039,7 +1057,7 @@ function createStyles(ui) {
   },
   hint: {
     fontSize: 12,
-    color: '#868e96',
+    color: ui.textMuted,
     marginTop: 4,
     marginBottom: 4,
   },
@@ -1136,7 +1154,7 @@ function createStyles(ui) {
   presetLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#495057',
+    color: ui.textSecondary,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -1177,7 +1195,7 @@ function createStyles(ui) {
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: '#e9ecef',
+    backgroundColor: ui.border,
   },
   apiKeyBtnText: {
     fontSize: 13,
@@ -1259,13 +1277,13 @@ function createStyles(ui) {
   },
   cancelBtn: {
     flex: 1,
-    backgroundColor: '#f1f3f5',
+    backgroundColor: ui.surfaceMuted,
     borderRadius: 10,
     paddingVertical: 13,
     alignItems: 'center',
   },
   cancelText: {
-    color: '#495057',
+    color: ui.textSecondary,
     fontWeight: '800',
   },
   saveBtn: {

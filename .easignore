@@ -1,0 +1,76 @@
+# Same as .gitignore, plus local build/export artifacts that bloat EAS uploads.
+# If .easignore exists, EAS uses it instead of .gitignore.
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Cursor IDE
+.cursor/
+.cursor/debug*.log
+.cursor/**/*.log
+
+# Local Expo / web export checks (not needed on EAS)
+.expo-export-check/
+.expo-export-test/
+.expo-bundle-test/
+.expo-ui-check/
+
+# Local desktop / APK outputs (huge — do not upload)
+release/
+*.apk
+*.aab
+NAM-bill-Windows/
+NAM-bill-Windows.zip
+electron-builder-output/
+*.exe
+
+# Git metadata (not needed on EAS)
+.git/
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# Website / marketing / admin tools (not used by the mobile app build)
+website/
+web/
+scripts/
+*.pptx
+*.ppt
+
+# Misc local junk
+WhatsApp Image*
+npx

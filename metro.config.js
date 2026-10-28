@@ -23,7 +23,6 @@ const extraBlockList = [
   blockProjectDir('website'),
   blockProjectDir('electron'),
   blockProjectDir('docs'),
-  blockProjectDir('key-generator'),
   blockProjectDir('table booker'),
   blockProjectDir('.cursor'),
   blockProjectDir('.claude'),

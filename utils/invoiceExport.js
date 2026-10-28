@@ -26,6 +26,86 @@ function formatInvoiceDate(timestamp) {
   };
 }
 
+function formatReceiptDate(timestamp) {
+  const date = timestamp ? new Date(timestamp) : new Date();
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${day}-${months[date.getMonth()]}-${date.getFullYear()}`;
+}
+
+const RECEIPT_WIDTH = 37;
+
+function receiptPadRight(value, width) {
+  const text = String(value ?? '');
+  if (text.length >= width) return text.slice(0, width);
+  return text + ' '.repeat(width - text.length);
+}
+
+function receiptPadLeft(value, width) {
+  const text = String(value ?? '');
+  if (text.length >= width) return text.slice(0, width);
+  return ' '.repeat(width - text.length) + text;
+}
+
+function receiptCenter(value, width = RECEIPT_WIDTH) {
+  const text = String(value ?? '').trim();
+  if (!text) return ' '.repeat(width);
+  if (text.length >= width) return text.slice(0, width);
+  const pad = width - text.length;
+  const left = Math.floor(pad / 2);
+  return `${' '.repeat(left)}${text}${' '.repeat(pad - left)}`;
+}
+
+function receiptMoney(value) {
+  return Number(value || 0).toFixed(2);
+}
+
+function receiptItemName(line) {
+  let name = String(line?.name || 'Item').trim() || 'Item';
+  if (line?.selectedVariant?.name) {
+    name += ` (${line.selectedVariant.name})`;
+  }
+  if (line?.selectedAddons?.length > 0) {
+    name += ` + ${line.selectedAddons.map((addon) => addon.name).join(', ')}`;
+  }
+  return name;
+}
+
+function receiptItemRow(name, qty, rate, amount) {
+  return `${receiptPadRight(name, 14)} ${receiptPadLeft(String(qty), 4)} ${receiptPadLeft(
+    receiptMoney(rate),
+    8
+  )} ${receiptPadLeft(receiptMoney(amount), 8)}`;
+}
+
+function receiptTotalRow(label, value, { negative = false } = {}) {
+  const amount = `${negative ? '-' : ''}${receiptMoney(value)}`;
+  const suffix = `: ${amount}`;
+  const left = String(label || '');
+  const space = RECEIPT_WIDTH - left.length - suffix.length;
+  return `${left}${' '.repeat(Math.max(1, space))}${suffix}`;
+}
+
+function receiptMetaRow(label, value) {
+  const key = receiptPadRight(label, 11);
+  const text = String(value ?? '').trim() || '-';
+  const maxValue = RECEIPT_WIDTH - key.length - 3;
+  return `${key}: ${text.slice(0, Math.max(1, maxValue))}`;
+}
+
 function formatLineDescription(line) {
   let desc = line.name || 'Item';
   if (line.selectedVariant) {
@@ -33,6 +113,10 @@ function formatLineDescription(line) {
   }
   if (line.selectedAddons?.length > 0) {
     desc += ` + ${line.selectedAddons.map((a) => a.name).join(', ')}`;
+  }
+  const note = String(line.note || '').trim();
+  if (note) {
+    desc += ` — Note: ${note}`;
   }
   return desc;
 }
@@ -62,6 +146,7 @@ export function orderToInvoiceHtml({
   isTableOrder = false,
   tableNumber = '',
   isPaid = false,
+  orderNote = '',
 }) {
   const { dateLabel, timeLabel } = formatInvoiceDate(timestamp);
   const displayShop = shopName || 'POS';
@@ -270,6 +355,15 @@ export function orderToInvoiceHtml({
         : ''
     }
   </div>
+
+  ${
+    String(orderNote || '').trim()
+      ? `<div style="margin:-8px 0 16px;padding:10px 12px;border:1px solid ${billTheme.border};border-radius:8px;background:#fff;font-size:13px;">
+      <div class="meta-label">Order note</div>
+      <div>${escapeHtml(String(orderNote).trim())}</div>
+    </div>`
+      : ''
+  }
 
   <table>
     <thead>
@@ -653,59 +747,123 @@ function buildWhatsAppInvoiceText(invoiceData) {
     timestamp,
     orderId,
     shopName,
+    fssaiNumber = '',
+    gstinNumber = '',
+    customerPhone = '',
     isTableOrder = false,
     tableNumber = '',
     isPaid = false,
+    orderNote = '',
   } = invoiceData;
 
-  const { dateLabel, timeLabel } = formatInvoiceDate(timestamp);
+  const rule = '='.repeat(RECEIPT_WIDTH);
+  const dash = '-'.repeat(RECEIPT_WIDTH);
+  const { timeLabel } = formatInvoiceDate(timestamp);
   const runningTable = isRunningTableOrder({ isTableOrder, isPaid });
-  const lines = [
-    shopName ? `*${shopName}*` : '*Invoice*',
-    runningTable ? '*Table Bill (Running)*' : '',
-    `Order ID: ${orderId || '-'}`,
-    isTableOrder && tableNumber ? `Table: ${tableNumber}` : '',
-    `${dateLabel} · ${timeLabel}`,
-    '',
-  ].filter(Boolean);
+  const shop = String(shopName || '').trim() || 'STORE / SHOP NAME';
+  const lines = [rule, receiptCenter(shop)];
 
-  (items || []).slice(0, 10).forEach((line, index) => {
-    lines.push(
-      `${index + 1}. ${formatLineDescription(line)} x${line.quantity || 1} — Rs ${Number(line.totalPrice || 0).toFixed(2)}`
-    );
-  });
+  const fssai = String(fssaiNumber || '').trim();
+  const gstin = String(gstinNumber || '').trim();
+  if (fssai) lines.push(receiptCenter(`FSSAI: ${fssai}`));
+  if (gstin) lines.push(receiptCenter(`GSTIN: ${gstin}`));
+  if (runningTable) lines.push(receiptCenter('Table Bill (Running)'));
 
-  if ((items || []).length > 10) {
-    lines.push(`...and ${items.length - 10} more item(s)`);
+  lines.push(rule);
+  lines.push(receiptMetaRow('Invoice No', orderId || '-'));
+  lines.push(receiptMetaRow('Date', formatReceiptDate(timestamp)));
+  lines.push(receiptMetaRow('Time', timeLabel));
+  lines.push(
+    receiptMetaRow(
+      'Customer',
+      String(customerPhone || '').trim() || 'Walk-in'
+    )
+  );
+  if (isTableOrder && tableNumber) {
+    lines.push(receiptMetaRow('Table', tableNumber));
+  }
+  if (String(orderNote || '').trim()) {
+    lines.push(receiptMetaRow('Note', String(orderNote).trim()));
   }
 
-  lines.push('');
-  const discount = Number(discountAmount) || 0;
-  if (offerApplied && discount > 0) {
-    const preTaxSubtotal =
-      cartSubtotal !== undefined && Number(cartSubtotal) > 0
-        ? Number(cartSubtotal)
-        : Number(subtotalAmount || totalAmount) + discount;
-    lines.push(`Items subtotal: Rs ${preTaxSubtotal.toFixed(2)}`);
-    const discountLabel = offerName ? `Discount (${offerName})` : 'Discount';
-    lines.push(`${discountLabel}: - Rs ${discount.toFixed(2)}`);
-  }
-  if (taxEnabled) {
-    const subtotal = subtotalAmount !== undefined ? Number(subtotalAmount) : Number(totalAmount);
-    lines.push(`Subtotal: Rs ${subtotal.toFixed(2)}`);
-    lines.push(`CGST @ 2.5%: Rs ${Number(cgstAmount || 0).toFixed(2)}`);
-    lines.push(`SGST @ 2.5%: Rs ${Number(sgstAmount || 0).toFixed(2)}`);
-    lines.push(`*Grand Total: Rs ${Number(totalAmount || 0).toFixed(2)}*`);
+  lines.push(dash);
+  lines.push(
+    `${receiptPadRight('Item', 14)} ${receiptPadLeft('Qty', 4)} ${receiptPadLeft(
+      'Rate',
+      8
+    )} ${receiptPadLeft('Amount', 8)}`
+  );
+  lines.push(dash);
+
+  const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (safeItems.length === 0) {
+    lines.push(receiptCenter('No items'));
   } else {
-    lines.push(`*Total: Rs ${Number(totalAmount || 0).toFixed(2)}*`);
+    safeItems.forEach((line) => {
+      const name = receiptItemName(line);
+      const qty = line.quantity || 1;
+      const rate = Number(line.unitPrice || 0);
+      const amount = Number(line.totalPrice || 0);
+      lines.push(receiptItemRow(name, qty, rate, amount));
+
+      // If name was truncated in the row, show full name underneath.
+      if (name.length > 14) {
+        lines.push(`  ${name}`.slice(0, RECEIPT_WIDTH));
+      }
+      const note = String(line.note || '').trim();
+      if (note) {
+        lines.push(`  * ${note}`.slice(0, RECEIPT_WIDTH));
+      }
+    });
   }
-  lines.push('', 'Thank you for your purchase!');
-  if (normalizeUpiQrUri(invoiceData?.upiQrUri)) {
-    lines.push('', 'Pay via UPI — scan the QR code image shared with this bill.');
+
+  lines.push(dash);
+
+  const discount = Number(discountAmount) || 0;
+  const preTaxSubtotal =
+    cartSubtotal !== undefined && Number(cartSubtotal) > 0
+      ? Number(cartSubtotal)
+      : Number(subtotalAmount || totalAmount) + (offerApplied ? discount : 0);
+
+  if (offerApplied && discount > 0) {
+    lines.push(receiptTotalRow('Items subtotal', preTaxSubtotal));
+    lines.push(
+      receiptTotalRow(offerName ? `Discount (${offerName})` : 'Discount', discount, {
+        negative: true,
+      })
+    );
   }
+
+  if (taxEnabled) {
+    const subtotal =
+      subtotalAmount !== undefined ? Number(subtotalAmount) : Number(totalAmount);
+    const gstTotal = Number(cgstAmount || 0) + Number(sgstAmount || 0);
+    lines.push(receiptTotalRow('Subtotal', subtotal));
+    lines.push(receiptTotalRow('GST (5%)', gstTotal));
+    lines.push(receiptTotalRow('TOTAL', totalAmount));
+  } else if (!(offerApplied && discount > 0)) {
+    lines.push(receiptTotalRow('TOTAL', totalAmount));
+  } else {
+    lines.push(receiptTotalRow('TOTAL', totalAmount));
+  }
+
+  lines.push(rule);
+  if (isPaid && !runningTable) {
+    lines.push(receiptCenter('PAID - Thank you!'));
+  } else {
+    lines.push(receiptCenter('Thanks for your visit!'));
+  }
+  lines.push(rule);
+
+  if (normalizeUpiQrUri(invoiceData?.upiQrUri) && !isPaid && !runningTable) {
+    lines.push('');
+    lines.push('Pay via UPI — scan the QR shared with this bill.');
+  }
+
   appendWebsiteLinks(lines, invoiceData);
 
-  return lines.join('\n');
+  // WhatsApp monospace block keeps columns aligned.
+  return ['```', ...lines, '```'].join('\n');
 }
 
 async function shareImageViaWhatsAppAndroid(fileUri, mimeType, caption, customerPhone) {
@@ -805,9 +963,14 @@ export async function shareWhatsAppInvoiceText(invoiceData) {
 
   const text = buildWhatsAppInvoiceText(invoiceData);
   const upiQrUri = normalizeUpiQrUri(invoiceData?.upiQrUri);
+  const runningTable = isRunningTableOrder({
+    isTableOrder: invoiceData?.isTableOrder,
+    isPaid: invoiceData?.isPaid,
+  });
+  const shouldAttachUpiQr = Boolean(upiQrUri) && !invoiceData?.isPaid && !runningTable;
 
   // Prefer sending QR image with bill caption (WhatsApp accepts image + text on Android).
-  if (upiQrUri) {
+  if (shouldAttachUpiQr) {
     try {
       const imageShare = await shareUpiQrOnWhatsApp({
         upiQrUri,

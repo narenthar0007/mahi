@@ -42,6 +42,7 @@ export default function ShareBillButtons({
   isTableOrder = false,
   tableNumber = '',
   isPaid = false,
+  orderNote = '',
 }) {
   const { ui, styles } =
     useThemedStyles(createStyles);
@@ -133,6 +134,7 @@ export default function ShareBillButtons({
       isTableOrder,
       tableNumber,
       isPaid,
+      orderNote,
     }),
     [
       items,
@@ -158,6 +160,7 @@ export default function ShareBillButtons({
       isTableOrder,
       tableNumber,
       isPaid,
+      orderNote,
     ]
   );
 
@@ -264,10 +267,6 @@ export default function ShareBillButtons({
       <TouchableOpacity
         style={[
           styles.whatsAppBtn,
-          {
-            borderColor:
-              theme.buttonColor,
-          },
           sharingWhatsApp &&
             styles.btnDisabled,
         ]}
@@ -279,19 +278,13 @@ export default function ShareBillButtons({
       >
         {sharingWhatsApp ? (
           <ActivityIndicator
-            color={
-              theme.buttonColor
-            }
+            color={ui.brandWhatsApp}
             size="small"
           />
         ) : (
           <Text
             style={[
               styles.whatsAppBtnText,
-              {
-                color:
-                  theme.buttonColor,
-              },
             ]}
           >
             {t('sendWhatsAppBill')}
@@ -305,7 +298,7 @@ export default function ShareBillButtons({
           styles.invoiceBtn,
           {
             backgroundColor:
-              theme.headerColor,
+              theme.buttonColor,
           },
           sharingInvoice &&
             styles.btnDisabled,
@@ -343,6 +336,8 @@ function createStyles(ui) {
   return {
     wrapper: {
       marginTop: 12,
+      flexDirection: 'row',
+      alignItems: 'stretch',
       gap: 8,
     },
 
@@ -351,30 +346,34 @@ function createStyles(ui) {
     },
 
     whatsAppBtn: {
-      backgroundColor:
-        ui.surface,
+      flex: 1,
+      backgroundColor: `${ui.brandWhatsApp}14`,
       borderRadius: ui.radiusMd,
       borderWidth: 1,
-      borderColor: ui.border,
+      borderColor: ui.brandWhatsApp,
       paddingVertical: 12,
+      paddingHorizontal: 8,
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: 44,
+      minHeight: 48,
     },
 
     whatsAppBtnText: {
       fontSize: 13,
-      fontWeight: '700',
+      fontWeight: '600',
+      color: ui.brandWhatsApp,
+      textAlign: 'center',
     },
 
     invoiceBtn: {
-      backgroundColor:
-        ui.textPrimary,
+      flex: 1,
+      backgroundColor: ui.textPrimary,
       borderRadius: ui.radiusMd,
       paddingVertical: 12,
+      paddingHorizontal: 8,
       alignItems: 'center',
       justifyContent: 'center',
-      minHeight: 44,
+      minHeight: 48,
     },
 
     btnDisabled: {
@@ -385,6 +384,7 @@ function createStyles(ui) {
       color: '#fff',
       fontSize: 13,
       fontWeight: '700',
+      textAlign: 'center',
     },
   };
 }

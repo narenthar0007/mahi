@@ -4,7 +4,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  StyleSheet,
   Pressable,
 } from 'react-native';
 import { useAppTheme } from '../utils/theme';
@@ -42,7 +41,7 @@ export default function ConfirmModal({
           <Text
             style={[
               styles.title,
-              { color: theme.textColor },
+              { color: ui.textPrimary },
             ]}
           >
             {title}
@@ -88,10 +87,10 @@ export default function ConfirmModal({
 }
 
 function createStyles(ui) {
-  return StyleSheet.create({
+  return {
     overlay: {
       flex: 1,
-      backgroundColor: 'rgba(17,24,39,0.4)',
+      backgroundColor: ui.overlay,
       justifyContent: 'center',
       alignItems: 'center',
       padding: 24,
@@ -102,7 +101,7 @@ function createStyles(ui) {
       maxWidth: 320,
       ...cardStyle(ui, {
         padding: 24,
-        borderRadius: ui.radiusXl,
+        borderRadius: ui.radiusLg,
       }),
     },
 
@@ -111,6 +110,7 @@ function createStyles(ui) {
       fontWeight: '700',
       marginBottom: 8,
       letterSpacing: -0.2,
+      color: ui.textPrimary,
     },
 
     message: {
@@ -127,8 +127,9 @@ function createStyles(ui) {
 
     btn: {
       flex: 1,
-      paddingVertical: 12,
-      borderRadius: ui.radiusSm,
+      paddingVertical: 14,
+      minHeight: 48,
+      borderRadius: ui.radiusMd,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -141,14 +142,14 @@ function createStyles(ui) {
 
     cancelText: {
       color: ui.textSecondary,
-      fontWeight: '700',
+      fontWeight: '600',
       fontSize: 15,
     },
 
     confirmText: {
       color: '#fff',
-      fontWeight: '700',
+      fontWeight: '600',
       fontSize: 15,
     },
-  });
+  };
 }

@@ -2,7 +2,7 @@ import { Platform, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { resolveTheme } from './theme';
 import { normalizeShopOffer } from './offers';
-import { normalizeUpiQrUri } from './upiQr';
+import { decryptBackupText, encryptBackupPayload } from './secureCrypto';
 
 export const BACKUP_VERSION = 1;
 export const BACKUP_APP_ID = 'geet-pos';
@@ -57,7 +57,7 @@ export function validateBackupPayload(raw) {
 }
 
 export function parseBackupText(text) {
-  const trimmed = String(text || '').trim();
+  const trimmed = decryptBackupText(text);
   if (!trimmed) {
     throw new Error('Paste backup JSON first.');
   }
@@ -102,7 +102,7 @@ export function normalizeImportedBackup(raw) {
 }
 
 async function downloadOnWeb(content, fileName) {
-  const blob = new Blob([content], { type: 'application/json' });
+    const blob = new Blob([content], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -112,8 +112,8 @@ async function downloadOnWeb(content, fileName) {
 }
 
 export async function shareBackupFile(payload) {
-  const json = JSON.stringify(payload, null, 2);
-  const fileName = `geet-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  const json = encryptBackupPayload(payload);
+  const fileName = `geet-backup-${new Date().toISOString().slice(0, 10)}.nbk`;
 
   if (Platform.OS === 'web') {
     await downloadOnWeb(json, fileName);
@@ -129,7 +129,7 @@ export async function shareBackupFile(payload) {
     });
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(uri, {
-        mimeType: 'application/json',
+        mimeType: 'text/plain',
         dialogTitle: 'Export NAM bill backup',
       });
       return { shared: true };

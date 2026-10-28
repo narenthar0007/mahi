@@ -10,6 +10,7 @@ import {
   ScrollView,
   Share,
   Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,8 +23,12 @@ import {
   formatRenewalCodeDateTime,
   formatRenewalCodeExpiry,
 } from '../utils/licenseKey';
-import { UI, inputStyle, shadow } from '../utils/uiTheme';
+import { inputStyle, shadow, useThemedStyles } from '../utils/uiTheme';
 import { APP_DISPLAY_NAME, APP_LOGO } from '../utils/appBrand';
+import { useAppTheme } from '../utils/theme';
+import { useTranslation } from '../utils/i18n';
+import AppButton from '../components/ui/AppButton';
+import ConfirmModal from '../components/ConfirmModal';
 
 function formatCountdown(ms) {
   if (ms <= 0) return '0:00';
@@ -35,9 +40,14 @@ function formatCountdown(ms) {
 
 export default function LoginScreen() {
   const login = useStore((s) => s.login);
+  const theme = useAppTheme();
+  const { t } = useTranslation();
+  const { ui, styles } = useThemedStyles(createStyles);
   const [shopName, setShopName] = useState('');
   const [licenseKey, setLicenseKey] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [updatePrompt, setUpdatePrompt] = useState(null);
   const [showRenewalPanel, setShowRenewalPanel] = useState(false);
   const [renewalCode, setRenewalCode] = useState('');
   const [renewalIssuedAt, setRenewalIssuedAt] = useState(null);
@@ -45,6 +55,9 @@ export default function LoginScreen() {
   const [countdownMs, setCountdownMs] = useState(0);
   const [renewalError, setRenewalError] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
+  const [devicePrompt, setDevicePrompt] = useState(false);
+
+  const renewalActive = Boolean(renewalCode && renewalExpiresAt && countdownMs > 0);
 
   useEffect(() => {
     if (!renewalExpiresAt) return undefined;
@@ -62,8 +75,19 @@ export default function LoginScreen() {
     return () => clearInterval(id);
   }, [renewalExpiresAt]);
 
-  const handleLogin = () => {
+  const openDownload = async (url) => {
+    if (!url) return;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      setError('Could not open the download link.');
+    }
+  };
+
+  const handleLogin = async (logoutOtherDevices = false) => {
     setError('');
+    setUpdatePrompt(null);
+    if (!logoutOtherDevices) setDevicePrompt(false);
 
     if (!shopName.trim()) {
       setError('Please enter your shop or POS name.');
@@ -75,12 +99,41 @@ export default function LoginScreen() {
       return;
     }
 
-    const result = login(shopName, licenseKey);
-    if (!result.success) {
-      setError(result.error);
-      if (result.reason === 'expired') {
-        setShowRenewalPanel(true);
+    setBusy(true);
+    try {
+      const result = await login(shopName, licenseKey, { logoutOtherDevices });
+      if (!result.success) {
+        if (result.reason === 'already_logged_in') {
+          setDevicePrompt(true);
+          setError('');
+          return;
+        }
+        setError(result.error);
+        if (result.reason === 'expired') {
+          setShowRenewalPanel(true);
+        }
+        if (result.reason === 'force_update') {
+          setUpdatePrompt({
+            required: true,
+            message: result.error,
+            downloadUrl: result.downloadUrl,
+          });
+        }
+        return;
       }
+      setDevicePrompt(false);
+
+      if (result.updateAvailable) {
+        setUpdatePrompt({
+          required: false,
+          message: result.updateMessage || 'A newer NAM bill app is available.',
+          downloadUrl: result.downloadUrl,
+        });
+      }
+    } catch {
+      setError('Could not verify this license. Check your internet and try again.');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -120,36 +173,23 @@ export default function LoginScreen() {
       setRenewalError('');
       setTimeout(() => setCodeCopied(false), 2000);
     } catch {
-      setRenewalError('Could not copy code. Please write it down manually.');
+      setRenewalError('Could not copy code.');
     }
   };
 
   const handleShareRenewalCode = async () => {
     if (!renewalCode) return;
-
-    const message = [
-      `${APP_DISPLAY_NAME} — License renewal request`,
-      `Shop: ${shopName.trim()}`,
-      `Renewal code: ${renewalCode}`,
-      `Code time: ${formatRenewalCodeDateTime(renewalCode, renewalIssuedAt || Date.now())}`,
-      `Valid until: ${formatRenewalCodeExpiry(renewalExpiresAt)}`,
-      `App ID: ${APP_LICENSE_ID}`,
-    ].join('\n');
-
     try {
-      await Share.share({ message, title: 'License renewal code' });
-    } catch (shareError) {
-      if (shareError?.message !== 'User did not share') {
-        setRenewalError('Could not open share sheet. Copy the code shown above and send it manually.');
-      }
+      await Share.share({
+        message: `${APP_DISPLAY_NAME} renewal code for "${shopName.trim()}": ${renewalCode}\nValid ~45 min. App: ${APP_LICENSE_ID}`,
+      });
+    } catch {
+      // user cancelled
     }
   };
 
-  const renewalExpired = Boolean(renewalExpiresAt && countdownMs <= 0);
-  const renewalActive = Boolean(renewalCode && renewalExpiresAt && countdownMs > 0);
-
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -157,43 +197,72 @@ export default function LoginScreen() {
         <ScrollView
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
           <View style={styles.logoWrap}>
-            <Image source={APP_LOGO} style={styles.logoImage} resizeMode="contain" accessibilityLabel={APP_DISPLAY_NAME} />
+            <Image
+              source={APP_LOGO}
+              style={styles.logoImage}
+              resizeMode="contain"
+              accessibilityLabel={APP_DISPLAY_NAME}
+            />
           </View>
+          <Text style={styles.brand}>{APP_DISPLAY_NAME}</Text>
           <Text style={styles.subtitle}>Enter your shop details and license key to continue</Text>
 
           <View style={styles.formCard}>
-          <Text style={styles.label}>Shop / POS Name</Text>
-          <TextInput
-            style={styles.input}
-            value={shopName}
-            onChangeText={setShopName}
-            placeholder="e.g. Riye Cafe"
-            placeholderTextColor="#adb5bd"
-            autoCapitalize="words"
-          />
+            <Text style={styles.label}>Shop / POS Name</Text>
+            <TextInput
+              style={styles.input}
+              value={shopName}
+              onChangeText={setShopName}
+              placeholder="e.g. Riye Cafe"
+              placeholderTextColor={ui.textMuted}
+              autoCapitalize="words"
+            />
 
-          <Text style={styles.label}>License Key (20 characters)</Text>
-          <TextInput
-            style={[styles.input, styles.keyInput]}
-            value={licenseKey}
-            onChangeText={handleKeyChange}
-            placeholder="Enter your 20-digit key"
-            placeholderTextColor="#adb5bd"
-            autoCapitalize="characters"
-            autoCorrect={false}
-            maxLength={LICENSE_KEY_LENGTH}
-          />
-          <Text style={styles.keyCounter}>
-            {licenseKey.length}/{LICENSE_KEY_LENGTH}
-          </Text>
+            <Text style={styles.label}>License Key (20 characters)</Text>
+            <TextInput
+              style={[styles.input, styles.keyInput]}
+              value={licenseKey}
+              onChangeText={handleKeyChange}
+              placeholder="Enter your 20-digit key"
+              placeholderTextColor={ui.textMuted}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={LICENSE_KEY_LENGTH}
+            />
+            <Text style={styles.keyCounter}>
+              {licenseKey.length}/{LICENSE_KEY_LENGTH}
+            </Text>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
-            <Text style={styles.loginText}>Login</Text>
-          </TouchableOpacity>
+            {updatePrompt ? (
+              <View style={styles.updateBox}>
+                <Text style={styles.updateTitle}>
+                  {updatePrompt.required ? 'App update required' : 'New app available'}
+                </Text>
+                <Text style={styles.updateText}>{updatePrompt.message}</Text>
+                {updatePrompt.downloadUrl ? (
+                  <AppButton
+                    title="Download latest app"
+                    onPress={() => openDownload(updatePrompt.downloadUrl)}
+                    color={theme.buttonColor}
+                    variant="secondary"
+                    style={{ backgroundColor: ui.surfaceMuted, marginTop: 8 }}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+
+            <AppButton
+              title="Login"
+              onPress={() => handleLogin(false)}
+              color={theme.buttonColor}
+              disabled={busy}
+              loading={busy}
+            />
           </View>
 
           {(showRenewalPanel || renewalActive) && (
@@ -207,54 +276,44 @@ export default function LoginScreen() {
               {renewalError ? <Text style={styles.renewalError}>{renewalError}</Text> : null}
 
               {renewalActive ? (
-                <>
-                  <Text style={styles.renewalCodeLabel}>Your 10-digit code</Text>
+                <View>
+                  <Text style={styles.renewalCodeLabel}>Your code</Text>
                   <View style={styles.renewalCodeRow}>
                     <Text style={styles.renewalCode}>{renewalCode}</Text>
-                    <TouchableOpacity
-                      style={styles.copyCodeBtn}
-                      onPress={handleCopyRenewalCode}
-                      accessibilityLabel="Copy renewal code"
-                    >
+                    <TouchableOpacity style={styles.copyCodeBtn} onPress={handleCopyRenewalCode}>
                       <Ionicons
-                        name={codeCopied ? 'checkmark' : 'copy-outline'}
-                        size={24}
-                        color={codeCopied ? '#25D366' : '#2DD4BF'}
+                        name={codeCopied ? 'checkmark-circle' : 'copy-outline'}
+                        size={22}
+                        color={theme.buttonColor}
                       />
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.renewalMeta}>
-                    Code time:{' '}
-                    {formatRenewalCodeDateTime(renewalCode, renewalIssuedAt || Date.now())}
-                  </Text>
-                  <Text style={styles.renewalMeta}>
-                    Expires: {formatRenewalCodeExpiry(renewalExpiresAt)} ({formatCountdown(countdownMs)}{' '}
-                    left)
-                  </Text>
-                  <Text style={styles.renewalMeta}>
-                    Format: MMDDHHMM + check digits · Shop: {shopName.trim()}
+                    Issued{' '}
+                    {formatRenewalCodeDateTime(renewalCode, renewalIssuedAt || Date.now())} · Expires{' '}
+                    {formatRenewalCodeExpiry(renewalExpiresAt)} · {formatCountdown(countdownMs)} left
                   </Text>
                   <TouchableOpacity style={styles.shareRenewalBtn} onPress={handleShareRenewalCode}>
-                    <Text style={styles.shareRenewalText}>Send code to owner</Text>
+                    <Text style={styles.shareRenewalText}>Share code</Text>
                   </TouchableOpacity>
-                </>
+                </View>
               ) : (
-                <TouchableOpacity style={styles.generateRenewalBtn} onPress={handleGenerateRenewalCode}>
-                  <Text style={styles.generateRenewalText}>Generate 10-digit renewal code</Text>
-                </TouchableOpacity>
+                <AppButton
+                  title="Generate renewal code"
+                  onPress={handleGenerateRenewalCode}
+                  color={theme.buttonColor}
+                  variant="secondary"
+                  style={{ backgroundColor: ui.surfaceMuted }}
+                />
               )}
-
-              {renewalExpired && showRenewalPanel && !renewalActive ? (
-                <TouchableOpacity style={styles.generateRenewalBtn} onPress={handleGenerateRenewalCode}>
-                  <Text style={styles.generateRenewalText}>Generate new code</Text>
-                </TouchableOpacity>
-              ) : null}
             </View>
           )}
 
           {!showRenewalPanel && !renewalActive ? (
             <TouchableOpacity style={styles.expiredLinkBtn} onPress={() => setShowRenewalPanel(true)}>
-              <Text style={styles.expiredLinkText}>License expired? Get renewal code</Text>
+              <Text style={[styles.expiredLinkText, { color: theme.buttonColor }]}>
+                License expired? Get renewal code
+              </Text>
             </TouchableOpacity>
           ) : null}
 
@@ -263,183 +322,202 @@ export default function LoginScreen() {
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
+      <ConfirmModal
+        visible={devicePrompt}
+        title={t('logoutAllDevicesTitle')}
+        message={t('logoutAllDevicesMessage')}
+        confirmLabel={t('logoutAllDevicesConfirm')}
+        cancelLabel={t('cancel')}
+        onConfirm={() => handleLogin(true)}
+        onCancel={() => setDevicePrompt(false)}
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0f172a' },
-  flex: { flex: 1 },
-  container: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
-    paddingBottom: 40,
-  },
-  logoWrap: {
-    alignSelf: 'center',
-    marginBottom: 12,
-  },
-  logoImage: {
-    width: 220,
-    height: 220,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.55)',
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 28,
-    lineHeight: 21,
-  },
-  formCard: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    padding: 20,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
-    marginBottom: 8,
-  },
-  input: {
-    ...inputStyle({
-      backgroundColor: 'rgba(255,255,255,0.06)',
-      borderColor: 'rgba(255,255,255,0.1)',
-      color: '#fff',
-      paddingVertical: 14,
+function createStyles(ui) {
+  return {
+    safe: { flex: 1, backgroundColor: ui.bg },
+    flex: { flex: 1 },
+    container: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      padding: 24,
+      paddingBottom: 40,
+    },
+    logoWrap: {
+      alignSelf: 'center',
+      marginBottom: 8,
+    },
+    logoImage: {
+      width: 120,
+      height: 120,
+      borderRadius: ui.radiusLg,
+    },
+    brand: {
+      fontSize: 22,
+      fontWeight: '700',
+      letterSpacing: -0.4,
+      color: ui.textPrimary,
+      textAlign: 'center',
+      marginBottom: 6,
+    },
+    subtitle: {
+      fontSize: 14,
+      color: ui.textSecondary,
+      textAlign: 'center',
+      marginBottom: 28,
+      lineHeight: 21,
+    },
+    formCard: {
+      backgroundColor: ui.surface,
+      borderRadius: ui.radiusLg,
+      borderWidth: 1,
+      borderColor: ui.border,
+      padding: 20,
+      ...shadow('xs'),
+    },
+    label: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: ui.textSecondary,
+      marginBottom: 8,
+    },
+    input: {
+      ...inputStyle(ui, {
+        marginBottom: 14,
+      }),
+    },
+    keyInput: {
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+      letterSpacing: 2,
+    },
+    keyCounter: {
+      fontSize: 12,
+      color: ui.textMuted,
+      textAlign: 'right',
+      marginTop: -10,
+      marginBottom: 16,
+    },
+    error: {
+      color: ui.danger,
+      fontSize: 14,
+      marginBottom: 16,
+      lineHeight: 20,
+    },
+    updateBox: {
+      marginBottom: 16,
+      padding: 12,
+      borderRadius: ui.radiusMd,
+      backgroundColor: ui.surfaceMuted,
+      borderWidth: 1,
+      borderColor: ui.border,
+    },
+    updateTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: ui.textPrimary,
+      marginBottom: 6,
+    },
+    updateText: {
+      fontSize: 13,
+      color: ui.textSecondary,
+      lineHeight: 19,
+    },
+    renewalPanel: {
+      marginTop: 20,
+      padding: 16,
+      borderRadius: ui.radiusLg,
+      backgroundColor: ui.surface,
+      borderWidth: 1,
+      borderColor: ui.border,
+      ...shadow('xs'),
+    },
+    renewalTitle: {
+      color: ui.textPrimary,
+      fontSize: 16,
+      fontWeight: '700',
+      marginBottom: 8,
+    },
+    renewalHelp: {
+      color: ui.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
       marginBottom: 14,
-    }),
-  },
-  keyInput: {
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    letterSpacing: 2,
-  },
-  keyCounter: {
-    fontSize: 12,
-    color: '#8d99ae',
-    textAlign: 'right',
-    marginTop: -10,
-    marginBottom: 16,
-  },
-  error: {
-    color: '#ff6b6b',
-    fontSize: 14,
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  loginBtn: {
-    backgroundColor: '#fff',
-    paddingVertical: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  loginText: {
-    color: '#0f172a',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  renewalPanel: {
-    marginTop: 20,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: '#16213e',
-    borderWidth: 1,
-    borderColor: '#0f3460',
-    ...shadow('lg'),
-  },
-  renewalTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  renewalHelp: {
-    color: '#8d99ae',
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 14,
-  },
-  renewalError: {
-    color: '#ff6b6b',
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 12,
-  },
-  renewalCodeLabel: {
-    color: '#ced4da',
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  renewalCodeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  renewalCode: {
-    color: '#fbbf24',
-    fontSize: 32,
-    fontWeight: '900',
-    letterSpacing: 4,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  copyCodeBtn: {
-    marginLeft: 10,
-    padding: 8,
-  },
-  renewalMeta: {
-    color: '#adb5bd',
-    fontSize: 12,
-    lineHeight: 18,
-    marginBottom: 4,
-  },
-  generateRenewalBtn: {
-    backgroundColor: '#0f3460',
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  generateRenewalText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  shareRenewalBtn: {
-    backgroundColor: '#25D366',
-    borderRadius: 10,
-    paddingVertical: 13,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  shareRenewalText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 14,
-  },
-  expiredLinkBtn: {
-    marginTop: 14,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  expiredLinkText: {
-    color: '#2DD4BF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  footer: {
-    fontSize: 12,
-    color: '#6c757d',
-    textAlign: 'center',
-    marginTop: 24,
-    lineHeight: 18,
-  },
-});
+    },
+    renewalError: {
+      color: ui.danger,
+      fontSize: 13,
+      lineHeight: 19,
+      marginBottom: 12,
+    },
+    renewalCodeLabel: {
+      color: ui.textMuted,
+      fontSize: 12,
+      fontWeight: '700',
+      marginBottom: 6,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    renewalCodeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 10,
+    },
+    renewalCode: {
+      color: ui.textPrimary,
+      fontSize: 28,
+      fontWeight: '800',
+      letterSpacing: 4,
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+    copyCodeBtn: {
+      marginLeft: 10,
+      padding: 8,
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    renewalMeta: {
+      color: ui.textMuted,
+      fontSize: 12,
+      lineHeight: 18,
+      marginBottom: 4,
+      textAlign: 'center',
+    },
+    shareRenewalBtn: {
+      backgroundColor: ui.brandWhatsApp,
+      borderRadius: ui.radiusMd,
+      paddingVertical: 13,
+      alignItems: 'center',
+      marginTop: 12,
+      minHeight: 48,
+      justifyContent: 'center',
+    },
+    shareRenewalText: {
+      color: '#fff',
+      fontWeight: '700',
+      fontSize: 14,
+    },
+    expiredLinkBtn: {
+      marginTop: 14,
+      paddingVertical: 10,
+      alignItems: 'center',
+      minHeight: 44,
+      justifyContent: 'center',
+    },
+    expiredLinkText: {
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    footer: {
+      fontSize: 12,
+      color: ui.textSecondary,
+      textAlign: 'center',
+      marginTop: 24,
+      lineHeight: 18,
+    },
+  };
+}

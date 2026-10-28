@@ -75,7 +75,50 @@ export const parseOptionList = (raw, fieldLabel, lineNumber) => {
   });
 };
 
-const parseCsvLine = (line) => {
+/** Prefer tabs when pasting from Excel / Google Sheets tables. */
+export const detectDelimiter = (text) => {
+  const sampleLines = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 5);
+
+  if (sampleLines.length === 0) return ',';
+
+  let tabScore = 0;
+  let commaScore = 0;
+  let semicolonScore = 0;
+
+  sampleLines.forEach((line) => {
+    tabScore += (line.match(/\t/g) || []).length;
+    // Count commas/semicolons outside quotes.
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+      if (inQuotes) continue;
+      if (char === ',') commaScore += 1;
+      if (char === ';') semicolonScore += 1;
+    }
+  });
+
+  if (tabScore > 0 && tabScore >= commaScore && tabScore >= semicolonScore) {
+    return '\t';
+  }
+  if (semicolonScore > commaScore) {
+    return ';';
+  }
+  return ',';
+};
+
+const parseDelimitedLine = (line, delimiter) => {
   const cells = [];
   let current = '';
   let inQuotes = false;
@@ -91,7 +134,7 @@ const parseCsvLine = (line) => {
       }
       continue;
     }
-    if (char === ',' && !inQuotes) {
+    if (char === delimiter && !inQuotes) {
       cells.push(current);
       current = '';
       continue;
@@ -168,19 +211,20 @@ const parseJsonImport = (text) => {
 const parseCsvImport = (text) => {
   const lines = text
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
 
   if (lines.length === 0) {
     throw new Error('Paste CSV rows to import.');
   }
 
+  const delimiter = detectDelimiter(lines.join('\n'));
   const items = [];
   const errors = [];
 
   lines.forEach((line, index) => {
     const lineNumber = index + 1;
-    const cells = parseCsvLine(line);
+    const cells = parseDelimitedLine(line, delimiter);
 
     if (index === 0 && isHeaderRow(cells)) {
       return;
@@ -212,7 +256,11 @@ const parseCsvImport = (text) => {
     throw new Error('No item rows found. Add data rows below the header.');
   }
 
-  return { items, errors, format: 'csv' };
+  return {
+    items,
+    errors,
+    format: delimiter === '\t' ? 'tsv' : delimiter === ';' ? 'csv-semicolon' : 'csv',
+  };
 };
 
 export const parseBulkImportText = (text) => {

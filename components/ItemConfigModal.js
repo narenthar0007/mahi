@@ -53,6 +53,7 @@ export default function ItemConfigModal({
     useState('1');
   const [sellingPriceText, setSellingPriceText] =
     useState('');
+  const [itemNote, setItemNote] = useState('');
 
   const hasVariants =
     item?.variants?.length > 0;
@@ -69,6 +70,7 @@ export default function ItemConfigModal({
     setSelectedVariant(null);
     setSelectedAddons([]);
     setQuantityText('1');
+    setItemNote('');
 
     setSellingPriceText(
       item.basePrice === 0 || item.basePrice
@@ -211,6 +213,14 @@ export default function ItemConfigModal({
       };
     }
 
+    const note = itemNote.trim();
+    if (note) {
+      options = {
+        ...options,
+        note,
+      };
+    }
+
     onAddToCart?.(
       item,
       selectedVariant,
@@ -226,6 +236,7 @@ export default function ItemConfigModal({
     isWeightBased,
     isVariablePrice,
     sellingPriceText,
+    itemNote,
     onAddToCart,
     onClose,
     item,
@@ -345,7 +356,7 @@ export default function ItemConfigModal({
                   placeholder={t(
                     'pricePlaceholder'
                   )}
-                  placeholderTextColor="#adb5bd"
+                  placeholderTextColor={ui.textMuted}
                   keyboardType="decimal-pad"
                   maxLength={9}
                 />
@@ -658,6 +669,29 @@ export default function ItemConfigModal({
                 )}
               </Text>
             ) : null}
+
+            <View style={styles.section}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: theme.textColor },
+                ]}
+              >
+                {t('itemNote')}
+              </Text>
+              <TextInput
+                style={[
+                  styles.noteInput,
+                  { color: theme.textColor },
+                ]}
+                value={itemNote}
+                onChangeText={setItemNote}
+                placeholder={t('itemNotePlaceholder')}
+                placeholderTextColor={ui.textMuted}
+                multiline
+                maxLength={120}
+              />
+            </View>
           </ScrollView>
 
           <View style={styles.footer}>
@@ -825,7 +859,7 @@ function createStyles(ui) {
 
     hint: {
       fontSize: 12,
-      color: '#868e96',
+      color: ui.textMuted,
       marginTop: 8,
     },
 
@@ -885,9 +919,21 @@ function createStyles(ui) {
 
     noOptions: {
       fontSize: 15,
-      color: '#6c757d',
+      color: ui.textSecondary,
       textAlign: 'center',
       paddingVertical: 20,
+    },
+
+    noteInput: {
+      borderWidth: 1,
+      borderColor: ui.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      minHeight: 64,
+      fontSize: 14,
+      textAlignVertical: 'top',
+      backgroundColor: ui.surfaceMuted,
     },
 
     footer: {
@@ -902,7 +948,7 @@ function createStyles(ui) {
 
     totalLabel: {
       fontSize: 16,
-      color: '#6c757d',
+      color: ui.textSecondary,
     },
 
     totalValue: {
@@ -920,14 +966,14 @@ function createStyles(ui) {
       flex: 1,
       paddingVertical: 14,
       borderRadius: 10,
-      backgroundColor: '#f1f3f5',
+      backgroundColor: ui.surfaceMuted,
       alignItems: 'center',
     },
 
     cancelText: {
       fontSize: 16,
       fontWeight: '600',
-      color: '#495057',
+      color: ui.textSecondary,
     },
 
     addBtn: {

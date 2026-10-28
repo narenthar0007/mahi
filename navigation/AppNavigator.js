@@ -10,6 +10,7 @@ import {
   Modal,
   Pressable,
   Platform,
+  Linking,
 } from 'react-native';
 
 import {
@@ -48,6 +49,7 @@ import {
 } from '../utils/appBrand';
 import { useUI } from '../utils/uiTheme';
 import { showAlert } from '../utils/alert';
+import { getLicenseAccess } from '../utils/licenseKey';
 
 const Tab = createBottomTabNavigator();
 
@@ -74,7 +76,7 @@ const TAB_ICONS = {
 
 function AppHeader({
   title,
-  backgroundColor,
+  accentColor,
   menuOpen,
   onOpenMenu,
   onCloseMenu,
@@ -83,6 +85,7 @@ function AppHeader({
 }) {
   const safeInsets = useSafeAreaInsets();
   const ui = useUI();
+  const accent = accentColor || '#0F766E';
 
   const enableTables = useStore(
     (s) => s.enableTables !== false
@@ -101,7 +104,8 @@ function AppHeader({
       style={[
         navStyles.headerRoot,
         {
-          backgroundColor,
+          backgroundColor: ui.surface,
+          borderBottomColor: ui.border,
           paddingTop: safeInsets.top,
         },
       ]}
@@ -112,13 +116,19 @@ function AppHeader({
           {APP_LOGO ? (
             <Image
               source={APP_LOGO}
-              style={navStyles.headerLogo}
+              style={[
+                navStyles.headerLogo,
+                { backgroundColor: ui.surfaceMuted },
+              ]}
               resizeMode="contain"
             />
           ) : null}
 
           <Text
-            style={navStyles.headerTitleText}
+            style={[
+              navStyles.headerTitleText,
+              { color: ui.textPrimary },
+            ]}
             numberOfLines={1}
           >
             {title || APP_DISPLAY_NAME}
@@ -126,14 +136,17 @@ function AppHeader({
         </View>
 
         <TouchableOpacity
-          style={navStyles.menuBtn}
+          style={[
+            navStyles.menuBtn,
+            { backgroundColor: ui.surfaceMuted },
+          ]}
           onPress={onOpenMenu}
           activeOpacity={0.75}
         >
           <Ionicons
             name="menu"
-            size={25}
-            color="#fff"
+            size={22}
+            color={accent}
           />
         </TouchableOpacity>
       </View>
@@ -195,7 +208,7 @@ function AppHeader({
                   size={20}
                   color={
                     item.danger
-                      ? '#dc2626'
+                      ? ui.danger
                       : ui.textPrimary
                   }
                 />
@@ -206,8 +219,7 @@ function AppHeader({
                     {
                       color: ui.textPrimary,
                     },
-                    item.danger &&
-                      navStyles.menuItemTextDanger,
+                    item.danger && { color: ui.danger },
                   ]}
                 >
                   {item.label}
@@ -388,9 +400,7 @@ function MainTabs() {
       return (
         <AppHeader
           title={title}
-          backgroundColor={
-            theme.headerColor
-          }
+          accentColor={theme.buttonColor}
           menuOpen={menuOpen}
           onOpenMenu={handleOpenMenu}
           onCloseMenu={handleCloseMenu}
@@ -403,7 +413,7 @@ function MainTabs() {
         />
       );
     },
-    [screenTitles, theme.headerColor, menuOpen, handleOpenMenu, handleCloseMenu, tableMenuItems, baseMenuItems]
+    [screenTitles, theme.buttonColor, menuOpen, handleOpenMenu, handleCloseMenu, tableMenuItems, baseMenuItems]
   );
 
   /* =======================================================
@@ -414,6 +424,7 @@ function MainTabs() {
     <>
       <Tab.Navigator
         screenOptions={({ route }) => ({
+          lazy: true,
           header: () => renderHeader({ route }),
 
           tabBarActiveTintColor:
@@ -429,14 +440,14 @@ function MainTabs() {
             borderTopWidth: 1,
 
             borderTopColor:
-              ui.borderLight,
+              ui.border,
 
             height: tabBarHeight,
 
             paddingBottom:
               insets.bottom,
 
-            paddingTop: 10,
+            paddingTop: 8,
 
             elevation: 0,
 
@@ -444,14 +455,15 @@ function MainTabs() {
           },
 
           tabBarItemStyle: {
-            paddingVertical: 2,
+            paddingVertical: 4,
+            minHeight: 44,
           },
 
           tabBarLabelStyle: {
             fontSize: 11,
             fontWeight: '600',
             marginBottom: 2,
-            letterSpacing: 0.1,
+            letterSpacing: 0.15,
           },
 
           tabBarIcon: ({
@@ -463,20 +475,24 @@ function MainTabs() {
               TAB_ICONS.Billing;
 
             return (
-              <Ionicons
-                name={
-                  focused
-                    ? icons.filled
-                    : icons.outline
-                }
-                size={24}
-                color={color}
-                style={
-                  focused
-                    ? navStyles.tabIconActive
-                    : navStyles.tabIconInactive
-                }
-              />
+              <View
+                style={[
+                  navStyles.tabIconWrap,
+                  focused && {
+                    backgroundColor: `${theme.buttonColor}14`,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={
+                    focused
+                      ? icons.filled
+                      : icons.outline
+                  }
+                  size={22}
+                  color={color}
+                />
+              </View>
             );
           },
         })}
@@ -615,10 +631,55 @@ function MainTabs() {
    APP NAVIGATOR
 ========================================================= */
 
+function ForceUpdateGate({ info, ui }) {
+  const downloadUrl = info?.downloadUrl;
+  const message =
+    info?.message ||
+    'A new version of NAM bill is required. Download the latest app to continue.';
+
+  return (
+    <View style={[navStyles.loadingContainer, { backgroundColor: ui.bg, padding: 24 }]}>
+      <Image source={APP_LOGO} style={navStyles.headerLogo} />
+      <Text style={[navStyles.loadingText, { color: ui.textPrimary, fontWeight: '700', fontSize: 18 }]}>
+        App update required
+      </Text>
+      <Text style={[navStyles.loadingText, { color: ui.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }]}>
+        {message}
+      </Text>
+      {downloadUrl ? (
+        <Pressable
+          onPress={() => Linking.openURL(downloadUrl)}
+          style={{
+            marginTop: 20,
+            backgroundColor: ui.textPrimary || '#0F766E',
+            paddingVertical: 14,
+            paddingHorizontal: 20,
+            borderRadius: 12,
+            minHeight: 48,
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Download latest app</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 export default function AppNavigator() {
   const isAuthenticated =
     useStore(
       (s) => s.isAuthenticated
+    );
+
+  const licenseKey =
+    useStore(
+      (s) => s.licenseKey
+    );
+
+  const logout =
+    useStore(
+      (s) => s.logout
     );
 
   const checkLicense =
@@ -626,10 +687,31 @@ export default function AppNavigator() {
       (s) => s.checkLicense
     );
 
+  const forceUpdateRequired =
+    useStore(
+      (s) => s.forceUpdateRequired
+    );
+
+  const forceUpdateInfo =
+    useStore(
+      (s) => s.forceUpdateInfo
+    );
+
+  const ui = useUI();
+
+  const licenseAllowed = getLicenseAccess(licenseKey).allowed;
+  const canBill = Boolean(isAuthenticated && licenseAllowed);
+
   const [
     hydrated,
     setHydrated,
   ] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated || licenseAllowed) return undefined;
+    logout({ updateSheet: true });
+    return undefined;
+  }, [hydrated, isAuthenticated, licenseAllowed, logout]);
 
   /* =======================================================
      STORE HYDRATION
@@ -744,19 +826,21 @@ export default function AppNavigator() {
   if (!hydrated) {
     return (
       <View
-        style={
-          navStyles.loadingContainer
-        }
+        style={[
+          navStyles.loadingContainer,
+          { backgroundColor: ui.bg },
+        ]}
       >
         <ActivityIndicator
           size="large"
-          color="#ffffff"
+          color={ui.textPrimary}
         />
 
         <Text
-          style={
-            navStyles.loadingText
-          }
+          style={[
+            navStyles.loadingText,
+            { color: ui.textSecondary },
+          ]}
         >
           Loading...
         </Text>
@@ -768,11 +852,13 @@ export default function AppNavigator() {
      MAIN NAVIGATION
   ======================================================= */
 
+  if (forceUpdateRequired) {
+    return <ForceUpdateGate info={forceUpdateInfo} ui={ui} />;
+  }
+
   return (
-    <NavigationContainer
-      ref={navigationRef}
-    >
-      {isAuthenticated ? (
+    <NavigationContainer ref={navigationRef}>
+      {canBill ? (
         <>
           <MainTabs />
           <OfflineBanner />
@@ -801,7 +887,7 @@ const navStyles = StyleSheet.create({
 
   headerRoot: {
     width: '100%',
-    borderBottomWidth: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
 
   headerInner: {
@@ -835,38 +921,30 @@ const navStyles = StyleSheet.create({
     width: 28,
     height: 28,
 
-    borderRadius: 6,
-
-    backgroundColor:
-      'rgba(255,255,255,0.95)',
+    borderRadius: 10,
 
     flexShrink: 0,
   },
 
   headerTitleText: {
-    color: '#fff',
-
     fontWeight: '700',
 
     fontSize: 17,
 
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
 
     flexShrink: 1,
   },
 
   menuBtn: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
 
-    borderRadius: 10,
+    borderRadius: 14,
 
     alignItems: 'center',
 
     justifyContent: 'center',
-
-    backgroundColor:
-      'rgba(255,255,255,0.12)',
   },
 
   /* MENU */
@@ -882,7 +960,7 @@ const navStyles = StyleSheet.create({
 
     minWidth: 200,
 
-    borderRadius: 14,
+    borderRadius: 18,
 
     paddingVertical: 6,
 
@@ -890,20 +968,20 @@ const navStyles = StyleSheet.create({
 
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
+        shadowColor: '#0F172A',
 
-        shadowOpacity: 0.18,
+        shadowOpacity: 0.1,
 
         shadowRadius: 12,
 
         shadowOffset: {
           width: 0,
-          height: 6,
+          height: 4,
         },
       },
 
       android: {
-        elevation: 8,
+        elevation: 4,
       },
 
       default: {},
@@ -919,7 +997,9 @@ const navStyles = StyleSheet.create({
 
     paddingHorizontal: 16,
 
-    paddingVertical: 13,
+    paddingVertical: 14,
+
+    minHeight: 48,
 
     borderBottomWidth:
       StyleSheet.hairlineWidth,
@@ -942,8 +1022,10 @@ const navStyles = StyleSheet.create({
   /* TAB ICON */
 
   tabIconWrap: {
-    width: 28,
+    width: 40,
     height: 28,
+
+    borderRadius: 10,
 
     alignItems: 'center',
 
@@ -957,7 +1039,7 @@ const navStyles = StyleSheet.create({
   tabIconActive: {
     transform: [
       {
-        scale: 1.05,
+        scale: 1.0,
       },
     ],
   },
@@ -970,14 +1052,10 @@ const navStyles = StyleSheet.create({
     justifyContent: 'center',
 
     alignItems: 'center',
-
-    backgroundColor: '#1a1a2e',
   },
 
   loadingText: {
     marginTop: 12,
-
-    color: '#ffffff',
 
     fontSize: 14,
 

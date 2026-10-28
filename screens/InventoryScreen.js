@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,12 @@ import {
   TouchableOpacity,
   ScrollView,
   KeyboardAvoidingView,
+  Keyboard,
+  Dimensions,
   Platform,
   Switch,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -19,12 +23,12 @@ import { showAlert } from '../utils/alert';
 import { useAppTheme } from '../utils/theme';
 import { useTranslation } from '../utils/i18n';
 import {
-  cardStyle,
   inputStyle,
   sectionTitle,
   useThemedStyles,
 } from '../utils/uiTheme';
 import { useResponsiveLayout } from '../utils/responsive';
+import AppEmptyState from '../components/ui/AppEmptyState';
 
 import {
   BULK_IMPORT_ITEM_TYPES,
@@ -104,6 +108,9 @@ export default function InventoryScreen() {
   const [editingItemId, setEditingItemId] =
     useState(null);
 
+  const [itemFormVisible, setItemFormVisible] =
+    useState(false);
+
   const [showBulkImport, setShowBulkImport] =
     useState(false);
 
@@ -112,42 +119,91 @@ export default function InventoryScreen() {
     useState(null);
 
   const scrollRef = useRef(null);
+  const formScrollRef = useRef(null);
+  const bulkScrollRef = useRef(null);
+  const fieldOffsets = useRef({});
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  const itemFormSheetHeight = useMemo(
+    () => Math.round(Dimensions.get('window').height * 0.92),
+    [itemFormVisible]
+  );
+
+  const bulkImportSheetHeight = useMemo(
+    () => Math.round(Dimensions.get('window').height * 0.92),
+    [showBulkImport]
+  );
+
+  useEffect(() => {
+    if (!itemFormVisible) {
+      setKeyboardHeight(0);
+      return undefined;
+    }
+
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates?.height || 0);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [itemFormVisible]);
 
   /*
    * SCROLL
    */
 
+  const registerFieldOffset = useCallback((key, y) => {
+    fieldOffsets.current[key] = y;
+  }, []);
+
+  const registerFieldLayout = useCallback(
+    (key, event) => {
+      registerFieldOffset(key, 8 + event.nativeEvent.layout.y);
+    },
+    [registerFieldOffset]
+  );
+
+  const scrollFieldIntoView = useCallback((key) => {
+    const delay = Platform.OS === 'ios' ? 280 : 120;
+    setTimeout(() => {
+      const y = fieldOffsets.current[key];
+      if (typeof y === 'number') {
+        formScrollRef.current?.scrollTo({
+          y: Math.max(0, y - 36),
+          animated: true,
+        });
+      }
+    }, delay);
+  }, []);
+
   const scrollToFormTop = () => {
+    fieldOffsets.current = {};
     const timer = setTimeout(() => {
-      scrollRef.current?.scrollTo({
+      formScrollRef.current?.scrollTo({
         y: 0,
-        animated: true,
+        animated: false,
       });
     }, 50);
 
     return () => clearTimeout(timer);
   };
 
-  useEffect(() => {
-    if (!editingItemId) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: 0,
-        animated: true,
-      });
-    }, 50);
-
-    return () => clearTimeout(timer);
-  }, [editingItemId]);
-
   /*
    * RESET FORM
    */
 
-  const resetForm = () => {
+  const resetFormFields = () => {
     setName('');
     setBasePrice('');
     setIsWeightBased(false);
@@ -156,6 +212,28 @@ export default function InventoryScreen() {
     setVariants([]);
     setAddons([]);
     setEditingItemId(null);
+  };
+
+  const resetForm = () => {
+    resetFormFields();
+    setItemFormVisible(false);
+  };
+
+  const openCreateItem = () => {
+    resetFormFields();
+    setShowBulkImport(false);
+    setItemFormVisible(true);
+    scrollToFormTop();
+  };
+
+  const openBulkImport = () => {
+    setItemFormVisible(false);
+    setShowBulkImport(true);
+  };
+
+  const closeBulkImport = () => {
+    setShowBulkImport(false);
+    setBulkPreview(null);
   };
 
   /*
@@ -224,6 +302,8 @@ export default function InventoryScreen() {
     );
 
     setShowBulkImport(false);
+    setItemFormVisible(true);
+    scrollToFormTop();
   };
 
   /*
@@ -560,782 +640,52 @@ export default function InventoryScreen() {
           }
           removeClippedSubviews={false}
         >
-          <Text
-            style={[
-              styles.heading,
-              sectionTitle(ui),
-              {
-                color: theme.textColor,
-              },
-            ]}
-          >
-            {editingItemId
-              ? t('editMenuItem')
-              : t('newMenuItem')}
-          </Text>
+          <View style={styles.headerRow}>
+            <Text
+              style={[
+                styles.heading,
+                sectionTitle(ui),
+                styles.headerTitle,
+              ]}
+              numberOfLines={1}
+            >
+              {t('inventoryItem')}
+            </Text>
 
-          {/* FORM CARD */}
-
-          <View style={styles.formCard}>
-            {/* BULK IMPORT */}
-
-            {!editingItemId ? (
-              <View style={styles.bulkSection}>
-                <TouchableOpacity
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={[
+                  styles.headerBtn,
+                  styles.headerBtnSecondary,
+                  { borderColor: theme.buttonColor },
+                ]}
+                onPress={openBulkImport}
+                activeOpacity={0.85}
+              >
+                <Text
                   style={[
-                    styles.bulkToggle,
-                    {
-                      borderColor:
-                        theme.buttonColor,
-                    },
+                    styles.headerBtnText,
+                    { color: theme.buttonColor },
                   ]}
-                  onPress={() =>
-                    setShowBulkImport(
-                      (prev) => !prev
-                    )
-                  }
+                  numberOfLines={1}
                 >
-                  <Text
-                    style={[
-                      styles.bulkToggleText,
-                      {
-                        color:
-                          theme.buttonColor,
-                      },
-                    ]}
-                  >
-                    {showBulkImport
-                      ? t('hideBulkImport')
-                      : t('bulkImportItems')}
-                  </Text>
-                </TouchableOpacity>
-
-                {showBulkImport ? (
-                  <View
-                    style={styles.bulkPanel}
-                  >
-                    <Text
-                      style={[
-                        styles.bulkTitle,
-                        {
-                          color:
-                            theme.textColor,
-                        },
-                      ]}
-                    >
-                      {t('bulkImportTitle')}
-                    </Text>
-
-                    <Text
-                      style={styles.bulkHint}
-                    >
-                      {t('bulkImportHint')}
-                    </Text>
-
-                    {BULK_IMPORT_ITEM_TYPES.map(
-                      (type) => (
-                        <View
-                          key={type.id}
-                          style={
-                            styles.bulkExampleRow
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.bulkExampleLabel,
-                              {
-                                color:
-                                  theme.textColor,
-                              },
-                            ]}
-                          >
-                            {t(
-                              `bulkType_${type.id}`
-                            )}
-                          </Text>
-
-                          <Text
-                            style={
-                              styles.bulkExampleText
-                            }
-                          >
-                            {type.example}
-                          </Text>
-                        </View>
-                      )
-                    )}
-
-                    <Text
-                      style={styles.bulkHint}
-                    >
-                      {t('bulkCsvHint')}
-                    </Text>
-
-                    <View
-                      style={
-                        styles.bulkActionsRow
-                      }
-                    >
-                      <TouchableOpacity
-                        style={[
-                          styles.bulkActionBtn,
-                          {
-                            backgroundColor:
-                              theme.filterSortColor,
-                          },
-                        ]}
-                        onPress={
-                          handleLoadSample
-                        }
-                      >
-                        <Text
-                          style={
-                            styles.bulkActionText
-                          }
-                        >
-                          {t('loadSample')}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.bulkActionBtn,
-                          styles.bulkActionBtnSecondary,
-                        ]}
-                        onPress={
-                          handlePreviewBulkImport
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.bulkActionText,
-                            styles.bulkActionTextSecondary,
-                          ]}
-                        >
-                          {t('preview')}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <TextInput
-                      style={styles.bulkInput}
-                      value={bulkText}
-                      onChangeText={(value) => {
-                        setBulkText(value);
-                        setBulkPreview(null);
-                      }}
-                      placeholder={t(
-                        'bulkPastePlaceholder'
-                      )}
-                      placeholderTextColor="#adb5bd"
-                      multiline
-                      textAlignVertical="top"
-                    />
-
-                    {bulkPreview?.items?.length >
-                    0 ? (
-                      <View
-                        style={
-                          styles.previewBox
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.previewHeading,
-                            {
-                              color:
-                                theme.textColor,
-                            },
-                          ]}
-                        >
-                          {t(
-                            'previewHeading',
-                            {
-                              count:
-                                bulkPreview
-                                  .items
-                                  .length,
-                            }
-                          )}
-                        </Text>
-
-                        {bulkPreview.items.map(
-                          (item, index) => (
-                            <Text
-                              key={`preview-${index}`}
-                              style={
-                                styles.previewLine
-                              }
-                            >
-                              {item.name} ·{' '}
-                              {formatCurrency(
-                                item.basePrice
-                              )}{' '}
-                              ·{' '}
-                              {describeImportItem(
-                                item
-                              )}
-                              {item.variants
-                                .length > 0
-                                ? ` · ${item.variants.length} variant(s)`
-                                : ''}
-                              {item.addons
-                                .length > 0
-                                ? ` · ${item.addons.length} add-on(s)`
-                                : ''}
-                            </Text>
-                          )
-                        )}
-                      </View>
-                    ) : null}
-
-                    <TouchableOpacity
-                      style={[
-                        styles.bulkImportBtn,
-                        {
-                          backgroundColor:
-                            theme.buttonColor,
-                        },
-                      ]}
-                      onPress={
-                        handleBulkImport
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.bulkImportBtnText
-                        }
-                      >
-                        {t('importItems')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-
-            {/* ITEM NAME */}
-
-            <Text style={styles.label}>
-              {t('itemName')}
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder={t(
-                'itemNamePlaceholder'
-              )}
-              placeholderTextColor="#adb5bd"
-            />
-
-            {/* BASE PRICE */}
-
-            <Text style={styles.label}>
-              {isVariablePrice
-                ? t('referencePrice')
-                : t('basePrice')}
-            </Text>
-
-            <TextInput
-              style={styles.input}
-              value={basePrice}
-              onChangeText={(value) =>
-                setBasePrice(
-                  sanitizePriceInput(value)
-                )
-              }
-              placeholder={t(
-                'pricePlaceholder'
-              )}
-              keyboardType="decimal-pad"
-              placeholderTextColor="#adb5bd"
-              maxLength={9}
-            />
-
-            {isVariablePrice ? (
-              <Text style={styles.hint}>
-                {t('variablePriceHint')}
-              </Text>
-            ) : null}
-
-            {/* WEIGHT BASED */}
-
-            {enableWeightBasedPricing ||
-            isWeightBased ? (
-              <View
-                style={styles.flagRow}
-              >
-                <View
-                  style={styles.flagCopy}
-                >
-                  <Text
-                    style={
-                      styles.flagLabel
-                    }
-                  >
-                    {t(
-                      'weightBasedPrice'
-                    )}
-                  </Text>
-
-                  <Text
-                    style={styles.hint}
-                  >
-                    {t(
-                      'weightBasedPriceHint'
-                    )}
-                  </Text>
-                </View>
-
-                <Switch
-                  value={isWeightBased}
-                  onValueChange={(value) => {
-                    if (
-                      value &&
-                      !enableWeightBasedPricing
-                    ) {
-                      showAlert(
-                        t(
-                          'featureDisabled'
-                        ),
-                        t(
-                          'weightBasedCreateDisabled'
-                        )
-                      );
-                      return;
-                    }
-
-                    setIsWeightBased(
-                      value
-                    );
-
-                    if (!value) {
-                      setUnit('');
-                    }
-                  }}
-                  disabled={
-                    !enableWeightBasedPricing &&
-                    !isWeightBased
-                  }
-                  trackColor={{
-                    false: '#dee2e6',
-                    true:
-                      'rgba(245, 180, 0, 0.55)',
-                  }}
-                  thumbColor={
-                    isWeightBased
-                      ? '#f5b400'
-                      : '#f8f9fa'
-                  }
-                />
-              </View>
-            ) : null}
-
-            {/* UNIT */}
-
-            {isWeightBased ? (
-              <>
-                <Text
-                  style={styles.label}
-                >
-                  {t('unit')} *
-                </Text>
-
-                <View
-                  style={styles.unitRow}
-                >
-                  {ITEM_UNITS.map(
-                    (unitOption) => (
-                      <TouchableOpacity
-                        key={unitOption}
-                        style={[
-                          styles.unitChip,
-                          unit ===
-                            unitOption && {
-                              borderColor:
-                                theme.buttonColor,
-                              backgroundColor:
-                                `${theme.buttonColor}18`,
-                            },
-                        ]}
-                        onPress={() =>
-                          setUnit(
-                            unitOption
-                          )
-                        }
-                      >
-                        <Text
-                          style={[
-                            styles.unitChipText,
-                            unit ===
-                              unitOption && {
-                                color:
-                                  theme.buttonColor,
-                              },
-                          ]}
-                        >
-                          {unitOption}
-                        </Text>
-                      </TouchableOpacity>
-                    )
-                  )}
-                </View>
-              </>
-            ) : null}
-
-            {/* VARIABLE PRICE */}
-
-            {enableVariablePriceItems ||
-            isVariablePrice ? (
-              <View
-                style={styles.flagRow}
-              >
-                <View
-                  style={styles.flagCopy}
-                >
-                  <Text
-                    style={
-                      styles.flagLabel
-                    }
-                  >
-                    {t('variablePrice')}
-                  </Text>
-
-                  <Text
-                    style={styles.hint}
-                  >
-                    {t(
-                      'variablePriceFlagHint'
-                    )}
-                  </Text>
-                </View>
-
-                <Switch
-                  value={isVariablePrice}
-                  onValueChange={(value) => {
-                    if (
-                      value &&
-                      !enableVariablePriceItems
-                    ) {
-                      showAlert(
-                        t(
-                          'featureDisabled'
-                        ),
-                        t(
-                          'variablePriceCreateDisabled'
-                        )
-                      );
-                      return;
-                    }
-
-                    setIsVariablePrice(
-                      value
-                    );
-                  }}
-                  disabled={
-                    !enableVariablePriceItems &&
-                    !isVariablePrice
-                  }
-                  trackColor={{
-                    false: '#dee2e6',
-                    true:
-                      'rgba(30, 136, 229, 0.45)',
-                  }}
-                  thumbColor={
-                    isVariablePrice
-                      ? '#1e88e5'
-                      : '#f8f9fa'
-                  }
-                />
-              </View>
-            ) : null}
-
-            {/* VARIANTS */}
-
-            <View
-              style={styles.sectionHeader}
-            >
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  {
-                    color:
-                      theme.textColor,
-                  },
-                ]}
-              >
-                {t('variantsTitle')}
-              </Text>
-
-              <TouchableOpacity
-                style={[
-                  styles.addChip,
-                  {
-                    backgroundColor:
-                      theme.filterSortColor,
-                  },
-                ]}
-                onPress={() =>
-                  setVariants((prev) => [
-                    ...prev,
-                    emptyVariant(),
-                  ])
-                }
-              >
-                <Text
-                  style={
-                    styles.addChipText
-                  }
-                >
-                  {t('addVariant')}
+                  {t('bulkImport')}
                 </Text>
               </TouchableOpacity>
-            </View>
-
-            <Text style={styles.hint}>
-              {t('variantHint')}
-            </Text>
-
-            {variants.map(
-              (variant, index) => (
-                <View
-                  key={`variant-${index}`}
-                  style={
-                    styles.dynamicRow
-                  }
-                >
-                  <TextInput
-                    style={[
-                      styles.input,
-                      styles.flexInput,
-                    ]}
-                    value={
-                      variant.name
-                    }
-                    onChangeText={(v) =>
-                      updateListItem(
-                        setVariants,
-                        index,
-                        'name',
-                        v
-                      )
-                    }
-                    placeholder={t(
-                      'sizeNamePlaceholder'
-                    )}
-                    placeholderTextColor="#adb5bd"
-                  />
-
-                  <TextInput
-                    style={[
-                      styles.input,
-                      styles.priceInput,
-                    ]}
-                    value={
-                      variant.price
-                    }
-                    onChangeText={(v) =>
-                      updateListItem(
-                        setVariants,
-                        index,
-                        'price',
-                        sanitizePriceInput(
-                          v
-                        )
-                      )
-                    }
-                    placeholder={t(
-                      'priceFieldPlaceholder'
-                    )}
-                    keyboardType="decimal-pad"
-                    maxLength={9}
-                    placeholderTextColor="#adb5bd"
-                  />
-
-                  <TouchableOpacity
-                    style={
-                      styles.removeBtn
-                    }
-                    onPress={() =>
-                      removeListItem(
-                        setVariants,
-                        index
-                      )
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.removeText
-                      }
-                    >
-                      ✕
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )
-            )}
-
-            {/* ADDONS */}
-
-            <View
-              style={styles.sectionHeader}
-            >
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  {
-                    color:
-                      theme.textColor,
-                  },
-                ]}
-              >
-                {t('addonsTitle')}
-              </Text>
 
               <TouchableOpacity
                 style={[
-                  styles.addChip,
-                  {
-                    backgroundColor:
-                      theme.filterSortColor,
-                  },
+                  styles.headerBtn,
+                  { backgroundColor: theme.buttonColor },
                 ]}
-                onPress={() =>
-                  setAddons((prev) => [
-                    ...prev,
-                    emptyAddon(),
-                  ])
-                }
+                onPress={openCreateItem}
+                activeOpacity={0.85}
               >
                 <Text
-                  style={
-                    styles.addChipText
-                  }
+                  style={styles.headerBtnTextPrimary}
+                  numberOfLines={1}
                 >
-                  {t('addAddon')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.hint}>
-              {t('addonHint')}
-            </Text>
-
-            {addons.map(
-              (addon, index) => (
-                <View
-                  key={`addon-${index}`}
-                  style={
-                    styles.dynamicRow
-                  }
-                >
-                  <TextInput
-                    style={[
-                      styles.input,
-                      styles.flexInput,
-                    ]}
-                    value={addon.name}
-                    onChangeText={(v) =>
-                      updateListItem(
-                        setAddons,
-                        index,
-                        'name',
-                        v
-                      )
-                    }
-                    placeholder={t(
-                      'addonNamePlaceholder'
-                    )}
-                    placeholderTextColor="#adb5bd"
-                  />
-
-                  <TextInput
-                    style={[
-                      styles.input,
-                      styles.priceInput,
-                    ]}
-                    value={addon.price}
-                    onChangeText={(v) =>
-                      updateListItem(
-                        setAddons,
-                        index,
-                        'price',
-                        sanitizePriceInput(
-                          v
-                        )
-                      )
-                    }
-                    placeholder="+Price"
-                    keyboardType="decimal-pad"
-                    placeholderTextColor="#adb5bd"
-                    maxLength={9}
-                  />
-
-                  <TouchableOpacity
-                    style={
-                      styles.removeBtn
-                    }
-                    onPress={() =>
-                      removeListItem(
-                        setAddons,
-                        index
-                      )
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.removeText
-                      }
-                    >
-                      ✕
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )
-            )}
-
-            {/* SAVE */}
-
-            <View
-              style={styles.saveRow}
-            >
-              {editingItemId ? (
-                <TouchableOpacity
-                  style={
-                    styles.cancelEditBtn
-                  }
-                  onPress={resetForm}
-                >
-                  <Text
-                    style={
-                      styles.cancelEditText
-                    }
-                  >
-                    {t('cancelEdit')}
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-
-              <TouchableOpacity
-                style={[
-                  styles.saveBtn,
-                  {
-                    backgroundColor:
-                      theme.buttonColor,
-                  },
-                ]}
-                onPress={handleSave}
-              >
-                <Text
-                  style={
-                    styles.saveBtnText
-                  }
-                >
-                  {editingItemId
-                    ? t('updateItem')
-                    : t('saveItem')}
+                  {t('createNewItem')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1351,8 +701,7 @@ export default function InventoryScreen() {
                 style={[
                   styles.listHeading,
                   {
-                    color:
-                      theme.textColor,
+                    color: ui.textPrimary,
                   },
                 ]}
               >
@@ -1550,13 +899,13 @@ export default function InventoryScreen() {
                           }
                           trackColor={{
                             false:
-                              '#dee2e6',
+                              ui.border,
                             true: `${theme.buttonColor}88`,
                           }}
                           thumbColor={
                             isEnabled
                               ? theme.buttonColor
-                              : '#f8f9fa'
+                              : ui.surfaceMuted
                           }
                         />
                       </View>
@@ -1603,9 +952,706 @@ export default function InventoryScreen() {
                 );
               })}
             </View>
-          ) : null}
+          ) : (
+            <AppEmptyState
+              icon="cube-outline"
+              title={t('noItemsYet')}
+            />
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+          <Modal
+            visible={itemFormVisible}
+            transparent
+            animationType="fade"
+            statusBarTranslucent
+            onRequestClose={resetForm}
+          >
+            <View style={styles.modalOverlay}>
+              <Pressable style={styles.modalBackdrop} onPress={resetForm} />
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                enabled={Platform.OS === 'ios'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+                style={[
+                  styles.modalSheetWrap,
+                  {
+                    height: itemFormSheetHeight,
+                    maxHeight: itemFormSheetHeight,
+                  },
+                ]}
+              >
+                <View style={[styles.modalSheet, { backgroundColor: ui.surface, borderColor: ui.border }]}>
+                  <View style={styles.modalHeader}>
+                    <Text style={[styles.modalTitle, { color: ui.textPrimary }]}>
+                      {editingItemId ? t('editInventoryItem') : t('createNewItem')}
+                    </Text>
+                    <TouchableOpacity onPress={resetForm} activeOpacity={0.85} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={[styles.modalClose, { color: theme.buttonColor }]}>{t('cancel')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView
+                    ref={formScrollRef}
+                    style={styles.modalScroll}
+                    contentContainerStyle={[
+                      styles.modalScrollContent,
+                      { paddingBottom: 20 + keyboardHeight },
+                    ]}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                    showsVerticalScrollIndicator
+                    nestedScrollEnabled
+                  >
+                    <View style={styles.formCard}>
+                      <Text style={styles.label}>{t('itemName')}</Text>
+
+
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder={t(
+                'itemNamePlaceholder'
+              )}
+              placeholderTextColor={ui.textMuted}
+            />
+
+            {/* BASE PRICE */}
+
+            <Text style={styles.label}>
+              {isVariablePrice
+                ? t('referencePrice')
+                : t('basePrice')}
+            </Text>
+
+            <TextInput
+              style={styles.input}
+              value={basePrice}
+              onChangeText={(value) =>
+                setBasePrice(
+                  sanitizePriceInput(value)
+                )
+              }
+              placeholder={t(
+                'pricePlaceholder'
+              )}
+              keyboardType="decimal-pad"
+              placeholderTextColor={ui.textMuted}
+              maxLength={9}
+            />
+
+            {isVariablePrice ? (
+              <Text style={styles.hint}>
+                {t('variablePriceHint')}
+              </Text>
+            ) : null}
+
+            {/* WEIGHT BASED */}
+
+            {enableWeightBasedPricing ||
+            isWeightBased ? (
+              <View
+                style={styles.flagRow}
+              >
+                <View
+                  style={styles.flagCopy}
+                >
+                  <Text
+                    style={
+                      styles.flagLabel
+                    }
+                  >
+                    {t(
+                      'weightBasedPrice'
+                    )}
+                  </Text>
+
+                  <Text
+                    style={styles.hint}
+                  >
+                    {t(
+                      'weightBasedPriceHint'
+                    )}
+                  </Text>
+                </View>
+
+                <Switch
+                  value={isWeightBased}
+                  onValueChange={(value) => {
+                    if (
+                      value &&
+                      !enableWeightBasedPricing
+                    ) {
+                      showAlert(
+                        t(
+                          'featureDisabled'
+                        ),
+                        t(
+                          'weightBasedCreateDisabled'
+                        )
+                      );
+                      return;
+                    }
+
+                    setIsWeightBased(
+                      value
+                    );
+
+                    if (!value) {
+                      setUnit('');
+                    }
+                  }}
+                  disabled={
+                    !enableWeightBasedPricing &&
+                    !isWeightBased
+                  }
+                  trackColor={{
+                    false: ui.border,
+                    true:
+                      'rgba(245, 180, 0, 0.55)',
+                  }}
+                  thumbColor={
+                    isWeightBased
+                      ? '#f5b400'
+                      : ui.surfaceMuted
+                  }
+                />
+              </View>
+            ) : null}
+
+            {/* UNIT */}
+
+            {isWeightBased ? (
+              <>
+                <Text
+                  style={styles.label}
+                >
+                  {t('unit')} *
+                </Text>
+
+                <View
+                  style={styles.unitRow}
+                >
+                  {ITEM_UNITS.map(
+                    (unitOption) => (
+                      <TouchableOpacity
+                        key={unitOption}
+                        style={[
+                          styles.unitChip,
+                          unit ===
+                            unitOption && {
+                              borderColor:
+                                theme.buttonColor,
+                              backgroundColor:
+                                `${theme.buttonColor}18`,
+                            },
+                        ]}
+                        onPress={() =>
+                          setUnit(
+                            unitOption
+                          )
+                        }
+                      >
+                        <Text
+                          style={[
+                            styles.unitChipText,
+                            unit ===
+                              unitOption && {
+                                color:
+                                  theme.buttonColor,
+                              },
+                          ]}
+                        >
+                          {unitOption}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  )}
+                </View>
+              </>
+            ) : null}
+
+            {/* VARIABLE PRICE */}
+
+            {enableVariablePriceItems ||
+            isVariablePrice ? (
+              <View
+                style={styles.flagRow}
+              >
+                <View
+                  style={styles.flagCopy}
+                >
+                  <Text
+                    style={
+                      styles.flagLabel
+                    }
+                  >
+                    {t('variablePrice')}
+                  </Text>
+
+                  <Text
+                    style={styles.hint}
+                  >
+                    {t(
+                      'variablePriceFlagHint'
+                    )}
+                  </Text>
+                </View>
+
+                <Switch
+                  value={isVariablePrice}
+                  onValueChange={(value) => {
+                    if (
+                      value &&
+                      !enableVariablePriceItems
+                    ) {
+                      showAlert(
+                        t(
+                          'featureDisabled'
+                        ),
+                        t(
+                          'variablePriceCreateDisabled'
+                        )
+                      );
+                      return;
+                    }
+
+                    setIsVariablePrice(
+                      value
+                    );
+                  }}
+                  disabled={
+                    !enableVariablePriceItems &&
+                    !isVariablePrice
+                  }
+                  trackColor={{
+                    false: ui.border,
+                    true:
+                      'rgba(30, 136, 229, 0.45)',
+                  }}
+                  thumbColor={
+                    isVariablePrice
+                      ? '#1e88e5'
+                      : ui.surfaceMuted
+                  }
+                />
+              </View>
+            ) : null}
+
+            {/* VARIANTS */}
+
+            <View
+              style={styles.sectionHeader}
+              onLayout={(event) =>
+                registerFieldLayout('variants-section', event)
+              }
+            >
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  {
+                    color: ui.textPrimary,
+                  },
+                ]}
+              >
+                {t('variantsTitle')}
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.addChip,
+                  {
+                    backgroundColor:
+                      theme.filterSortColor,
+                  },
+                ]}
+                onPress={() => {
+                  setVariants((prev) => [
+                    ...prev,
+                    emptyVariant(),
+                  ]);
+                  scrollFieldIntoView('variants-section');
+                }}
+              >
+                <Text
+                  style={
+                    styles.addChipText
+                  }
+                >
+                  {t('addVariant')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.hint}>
+              {t('variantHint')}
+            </Text>
+
+            {variants.map(
+              (variant, index) => (
+                <View
+                  key={`variant-${index}`}
+                  style={
+                    styles.dynamicRow
+                  }
+                  onLayout={(event) =>
+                    registerFieldLayout(`variant-${index}`, event)
+                  }
+                >
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.flexInput,
+                    ]}
+                    value={
+                      variant.name
+                    }
+                    onChangeText={(v) =>
+                      updateListItem(
+                        setVariants,
+                        index,
+                        'name',
+                        v
+                      )
+                    }
+                    placeholder={t(
+                      'sizeNamePlaceholder'
+                    )}
+                    placeholderTextColor={ui.textMuted}
+                    onFocus={() =>
+                      scrollFieldIntoView(`variant-${index}`)
+                    }
+                  />
+
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.priceInput,
+                    ]}
+                    value={
+                      variant.price
+                    }
+                    onChangeText={(v) =>
+                      updateListItem(
+                        setVariants,
+                        index,
+                        'price',
+                        sanitizePriceInput(
+                          v
+                        )
+                      )
+                    }
+                    placeholder={t(
+                      'priceFieldPlaceholder'
+                    )}
+                    keyboardType="decimal-pad"
+                    maxLength={9}
+                    placeholderTextColor={ui.textMuted}
+                    onFocus={() =>
+                      scrollFieldIntoView(`variant-${index}`)
+                    }
+                  />
+
+                  <TouchableOpacity
+                    style={
+                      styles.removeBtn
+                    }
+                    onPress={() =>
+                      removeListItem(
+                        setVariants,
+                        index
+                      )
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.removeText
+                      }
+                    >
+                      ✕
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )
+            )}
+
+            {/* ADDONS */}
+
+            <View
+              style={styles.sectionHeader}
+              onLayout={(event) =>
+                registerFieldLayout('addons-section', event)
+              }
+            >
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  {
+                    color: ui.textPrimary,
+                  },
+                ]}
+              >
+                {t('addonsTitle')}
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.addChip,
+                  {
+                    backgroundColor:
+                      theme.filterSortColor,
+                  },
+                ]}
+                onPress={() => {
+                  setAddons((prev) => [
+                    ...prev,
+                    emptyAddon(),
+                  ]);
+                  scrollFieldIntoView('addons-section');
+                }}
+              >
+                <Text
+                  style={
+                    styles.addChipText
+                  }
+                >
+                  {t('addAddon')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.hint}>
+              {t('addonHint')}
+            </Text>
+
+            {addons.map(
+              (addon, index) => (
+                <View
+                  key={`addon-${index}`}
+                  style={
+                    styles.dynamicRow
+                  }
+                  onLayout={(event) =>
+                    registerFieldLayout(`addon-${index}`, event)
+                  }
+                >
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.flexInput,
+                    ]}
+                    value={addon.name}
+                    onChangeText={(v) =>
+                      updateListItem(
+                        setAddons,
+                        index,
+                        'name',
+                        v
+                      )
+                    }
+                    placeholder={t(
+                      'addonNamePlaceholder'
+                    )}
+                    placeholderTextColor={ui.textMuted}
+                    onFocus={() =>
+                      scrollFieldIntoView(`addon-${index}`)
+                    }
+                  />
+
+                  <TextInput
+                    style={[
+                      styles.input,
+                      styles.priceInput,
+                    ]}
+                    value={addon.price}
+                    onChangeText={(v) =>
+                      updateListItem(
+                        setAddons,
+                        index,
+                        'price',
+                        sanitizePriceInput(
+                          v
+                        )
+                      )
+                    }
+                    placeholder="+Price"
+                    keyboardType="decimal-pad"
+                    placeholderTextColor={ui.textMuted}
+                    maxLength={9}
+                    onFocus={() =>
+                      scrollFieldIntoView(`addon-${index}`)
+                    }
+                  />
+
+                  <TouchableOpacity
+                    style={
+                      styles.removeBtn
+                    }
+                    onPress={() =>
+                      removeListItem(
+                        setAddons,
+                        index
+                      )
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.removeText
+                      }
+                    >
+                      ✕
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )
+            )}
+                    </View>
+                  </ScrollView>
+
+                  <View style={[styles.modalFooter, { borderTopColor: ui.borderLight }]}>
+                    <View style={styles.saveRow}>
+                      {editingItemId ? (
+                        <TouchableOpacity
+                          style={styles.cancelEditBtn}
+                          onPress={resetForm}
+                        >
+                          <Text style={styles.cancelEditText}>
+                            {t('cancelEdit')}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+
+                      <TouchableOpacity
+                        style={[
+                          styles.saveBtn,
+                          { backgroundColor: theme.buttonColor },
+                        ]}
+                        onPress={handleSave}
+                      >
+                        <Text style={styles.saveBtnText}>
+                          {editingItemId ? t('updateItem') : t('saveItem')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </KeyboardAvoidingView>
+            </View>
+          </Modal>
+
+          <Modal
+            visible={showBulkImport}
+            transparent
+            animationType="fade"
+            statusBarTranslucent
+            onRequestClose={closeBulkImport}
+          >
+            <View style={styles.modalOverlay}>
+              <Pressable style={styles.modalBackdrop} onPress={closeBulkImport} />
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                enabled={Platform.OS === 'ios'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+                style={[
+                  styles.modalSheetWrap,
+                  {
+                    height: bulkImportSheetHeight,
+                    maxHeight: bulkImportSheetHeight,
+                  },
+                ]}
+              >
+                <View style={[styles.modalSheet, { backgroundColor: ui.surface, borderColor: ui.border }]}>
+                  <View style={styles.modalHeader}>
+                    <Text style={[styles.modalTitle, { color: ui.textPrimary }]}>
+                      {t('bulkImportItems')}
+                    </Text>
+                    <TouchableOpacity onPress={closeBulkImport} activeOpacity={0.85} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={[styles.modalClose, { color: theme.buttonColor }]}>{t('cancel')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView
+                    ref={bulkScrollRef}
+                    style={[
+                      styles.modalScroll,
+                      Platform.OS === 'web' ? styles.modalScrollWeb : null,
+                    ]}
+                    contentContainerStyle={styles.modalScrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator
+                  >
+                    <View style={styles.bulkPanel}>
+                      <Text style={[styles.bulkTitle, { color: theme.textColor }]}>
+                        {t('bulkImportTitle')}
+                      </Text>
+                      <Text style={styles.bulkHint}>{t('bulkImportHint')}</Text>
+                      {BULK_IMPORT_ITEM_TYPES.map((type) => (
+                        <View key={type.id} style={styles.bulkExampleRow}>
+                          <Text style={[styles.bulkExampleLabel, { color: theme.textColor }]}>
+                            {t(`bulkType_${type.id}`)}
+                          </Text>
+                          <Text style={styles.bulkExampleText}>{type.example}</Text>
+                        </View>
+                      ))}
+                      <Text style={styles.bulkHint}>{t('bulkCsvHint')}</Text>
+                      <View style={styles.bulkActionsRow}>
+                        <TouchableOpacity
+                          style={[styles.bulkActionBtn, { backgroundColor: theme.filterSortColor }]}
+                          onPress={handleLoadSample}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.bulkActionText}>{t('loadSample')}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.bulkActionBtn, styles.bulkActionBtnSecondary]}
+                          onPress={handlePreviewBulkImport}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={[styles.bulkActionText, styles.bulkActionTextSecondary]}>
+                            {t('preview')}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                      <TextInput
+                        style={styles.bulkInput}
+                        value={bulkText}
+                        onChangeText={(value) => {
+                          setBulkText(value);
+                          setBulkPreview(null);
+                        }}
+                        placeholder={t('bulkPastePlaceholder')}
+                        placeholderTextColor={ui.textMuted}
+                        multiline
+                        textAlignVertical="top"
+                      />
+                      {bulkPreview?.items?.length > 0 ? (
+                        <View style={styles.previewBox}>
+                          <Text style={[styles.previewHeading, { color: theme.textColor }]}>
+                            {t('previewHeading', { count: bulkPreview.items.length })}
+                          </Text>
+                          {bulkPreview.items.map((item, index) => (
+                            <Text key={`preview-${index}`} style={styles.previewLine}>
+                              {item.name} · {formatCurrency(item.basePrice)} · {describeImportItem(item)}
+                              {item.variants.length > 0 ? ` · ${item.variants.length} variant(s)` : ''}
+                              {item.addons.length > 0 ? ` · ${item.addons.length} add-on(s)` : ''}
+                            </Text>
+                          ))}
+                        </View>
+                      ) : null}
+                      <TouchableOpacity
+                        style={[styles.bulkImportBtn, { backgroundColor: theme.buttonColor }]}
+                        onPress={handleBulkImport}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.bulkImportBtnText}>{t('importItems')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </ScrollView>
+                </View>
+              </KeyboardAvoidingView>
+            </View>
+          </Modal>
     </SafeAreaView>
   );
 }
@@ -1637,10 +1683,131 @@ function createStyles(ui) {
       marginBottom: 20,
     },
 
-    formCard: {
-      ...cardStyle(ui),
-      padding: 20,
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
       marginBottom: 8,
+    },
+
+    headerTitle: {
+      flex: 1,
+      flexShrink: 1,
+      marginBottom: 0,
+      minWidth: 0,
+    },
+
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexShrink: 0,
+    },
+
+    headerBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: ui.radiusMd,
+      alignItems: 'center',
+      justifyContent: 'center',
+      maxWidth: 148,
+    },
+
+    headerBtnSecondary: {
+      backgroundColor: ui.surface,
+      borderWidth: 1.5,
+    },
+
+    headerBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+
+    headerBtnTextPrimary: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#fff',
+    },
+
+    modalOverlay: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+
+    modalBackdrop: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      backgroundColor: 'rgba(11, 18, 32, 0.45)',
+    },
+
+    modalSheetWrap: {
+      width: '100%',
+      zIndex: 2,
+    },
+
+    modalSheet: {
+      flex: 1,
+      borderTopLeftRadius: ui.radiusXl,
+      borderTopRightRadius: ui.radiusXl,
+      borderWidth: 1,
+      borderBottomWidth: 0,
+      overflow: 'hidden',
+    },
+
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      paddingHorizontal: 18,
+      paddingTop: 16,
+      paddingBottom: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: ui.borderLight,
+    },
+
+    modalTitle: {
+      flex: 1,
+      fontSize: 17,
+      fontWeight: '700',
+    },
+
+    modalClose: {
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    modalScroll: {
+      flex: 1,
+      minHeight: 0,
+    },
+
+    modalScrollWeb: {
+      height: '100%',
+      overflow: 'auto',
+    },
+
+    modalScrollContent: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 24,
+    },
+
+    modalFooter: {
+      flexShrink: 0,
+      paddingHorizontal: 16,
+      paddingTop: 10,
+      paddingBottom: 14,
+      borderTopWidth: 1,
+    },
+
+    formCard: {
+      paddingHorizontal: 4,
+      paddingBottom: 8,
     },
 
     label: {
@@ -1700,13 +1867,13 @@ function createStyles(ui) {
     unitChipText: {
       fontSize: 13,
       fontWeight: '700',
-      color: '#495057',
+      color: ui.textSecondary,
     },
 
     typeBadges: {
       fontSize: 11,
       fontWeight: '700',
-      color: '#6c757d',
+      color: ui.textSecondary,
       marginTop: 2,
     },
 
@@ -1721,6 +1888,7 @@ function createStyles(ui) {
     sectionTitle: {
       fontSize: 17,
       fontWeight: '700',
+      color: ui.textPrimary,
     },
 
     addChip: {
@@ -1737,7 +1905,7 @@ function createStyles(ui) {
 
     hint: {
       fontSize: 12,
-      color: '#868e96',
+      color: ui.textMuted,
       marginBottom: 10,
     },
 
@@ -1792,7 +1960,7 @@ function createStyles(ui) {
 
     cancelEditBtn: {
       flex: 1,
-      backgroundColor: '#f1f3f5',
+      backgroundColor: ui.surfaceMuted,
       paddingVertical: 16,
       borderRadius: 12,
       alignItems: 'center',
@@ -1801,18 +1969,19 @@ function createStyles(ui) {
     },
 
     cancelEditText: {
-      color: '#495057',
+      color: ui.textSecondary,
       fontSize: 17,
       fontWeight: '700',
     },
 
     listSection: {
-      marginTop: 32,
+      marginTop: 12,
     },
 
     listHeading: {
       fontSize: 18,
       fontWeight: '700',
+      color: ui.textPrimary,
       marginBottom: 12,
     },
 
@@ -1828,19 +1997,19 @@ function createStyles(ui) {
     },
 
     savedCardDisabled: {
-      backgroundColor: '#f1f3f5',
+      backgroundColor: ui.surfaceMuted,
       borderColor: ui.borderLight,
       opacity: 0.82,
     },
 
     savedTextMuted: {
-      color: '#adb5bd',
+      color: ui.textMuted,
     },
 
     savedOffHint: {
       fontSize: 11,
       fontWeight: '600',
-      color: '#868e96',
+      color: ui.textMuted,
       marginTop: 2,
     },
 
@@ -1851,7 +2020,7 @@ function createStyles(ui) {
     savedId: {
       fontSize: 11,
       fontWeight: '700',
-      color: '#868e96',
+      color: ui.textMuted,
       marginBottom: 2,
     },
 
@@ -1868,7 +2037,7 @@ function createStyles(ui) {
 
     savedMeta: {
       fontSize: 13,
-      color: '#868e96',
+      color: ui.textMuted,
       marginTop: 2,
     },
 
@@ -1887,7 +2056,7 @@ function createStyles(ui) {
     itemToggleLabel: {
       fontSize: 10,
       fontWeight: '700',
-      color: '#868e96',
+      color: ui.textMuted,
       textTransform: 'uppercase',
       letterSpacing: 0.3,
     },
@@ -1940,7 +2109,7 @@ function createStyles(ui) {
 
     bulkHint: {
       fontSize: 12,
-      color: '#868e96',
+      color: ui.textMuted,
       marginBottom: 10,
       lineHeight: 18,
     },
@@ -1960,7 +2129,7 @@ function createStyles(ui) {
 
     bulkExampleText: {
       fontSize: 12,
-      color: '#495057',
+      color: ui.textSecondary,
       fontFamily:
         Platform.OS === 'ios'
           ? 'Menlo'
@@ -1981,7 +2150,7 @@ function createStyles(ui) {
     },
 
     bulkActionBtnSecondary: {
-      backgroundColor: '#f1f3f5',
+      backgroundColor: ui.surfaceMuted,
       borderWidth: 1,
       borderColor: ui.border,
     },
@@ -1993,7 +2162,7 @@ function createStyles(ui) {
     },
 
     bulkActionTextSecondary: {
-      color: '#495057',
+      color: ui.textSecondary,
     },
 
     bulkInput: {
@@ -2029,7 +2198,7 @@ function createStyles(ui) {
 
     previewLine: {
       fontSize: 12,
-      color: '#495057',
+      color: ui.textSecondary,
       marginBottom: 4,
     },
 

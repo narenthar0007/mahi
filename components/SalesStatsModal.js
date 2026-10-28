@@ -334,7 +334,7 @@ export default function SalesStatsModal({
   /* ---------------------------- Colors ---------------------------------- */
 
   const trendBarColor =
-    theme.buttonColor || '#e94560';
+    theme.buttonColor || '#0F766E';
 
   const itemBarColor =
     theme.headerColor || '#1a1a2e';
@@ -677,7 +677,7 @@ function createStyles(ui) {
     periodText: {
       fontSize: 13,
       fontWeight: '700',
-      color: '#868e96',
+      color: ui.textMuted,
     },
 
     scrollContent: {
@@ -785,7 +785,7 @@ function createStyles(ui) {
 
     barLabel: {
       fontSize: 9,
-      color: '#868e96',
+      color: ui.textMuted,
       fontWeight: '600',
       textAlign: 'center',
     },

@@ -276,3 +276,40 @@ export function getTableOrderHistoryStyle(order) {
   const { backgroundColor, borderColor } = TABLE_COLORS.historyTableOrder;
   return { backgroundColor, borderColor };
 }
+
+export function isTableLinkedOrder(order) {
+  return Boolean(order?.isTableOrder || order?.tableId);
+}
+
+export function filterOrdersByTableScope(orders, { scope = 'all', tableId = null } = {}) {
+  const list = Array.isArray(orders) ? orders : [];
+  const selectedId = tableId ? String(tableId) : '';
+  return list.filter((order) => {
+    if (!order) return false;
+    if (selectedId) {
+      return String(order.tableId || '') === selectedId;
+    }
+    if (scope === 'table') return isTableLinkedOrder(order);
+    if (scope === 'noTable') return !isTableLinkedOrder(order);
+    return true;
+  });
+}
+
+/** Tables currently occupied or holding an unpaid order — for history filters. */
+export function getActiveTablesForOrderFilter(tables, history) {
+  const runningIds = new Set();
+  (Array.isArray(history) ? history : []).forEach((order) => {
+    if (isTableLinkedOrder(order) && !order.isPaid && order.tableId) {
+      runningIds.add(String(order.tableId));
+    }
+  });
+  return (Array.isArray(tables) ? tables : [])
+    .filter((table) => {
+      if (!table) return false;
+      if (runningIds.has(String(table.id))) return true;
+      return table.status === 'occupied' || Boolean(table.currentOrderId);
+    })
+    .sort((a, b) =>
+      String(a.number).localeCompare(String(b.number), undefined, { numeric: true })
+    );
+}

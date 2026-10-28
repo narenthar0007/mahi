@@ -495,7 +495,7 @@ function createStyles(ui) {
     fontSize: 14,
   },
   dangerBtn: {
-    backgroundColor: '#dc2626',
+    backgroundColor: ui.danger,
     borderRadius: ui.radiusMd,
     paddingVertical: 13,
     alignItems: 'center',

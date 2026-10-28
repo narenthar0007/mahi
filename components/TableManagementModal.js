@@ -10,7 +10,9 @@ import {
   Pressable,
   Platform,
   KeyboardAvoidingView,
+  Dimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import useStore from '../store/store';
 import { showAlert } from '../utils/alert';
@@ -78,7 +80,7 @@ export default function TableManagementModal({
   const { ui, styles } = useThemedStyles(createStyles);
 
   const { t, language } = useTranslation();
-  const { bottom: bottomInset } = useLayoutInsets();
+  const { top: topInset, bottom: bottomInset } = useLayoutInsets();
 
   const tables = useStore((s) => s.tables);
   const history = useStore((s) => s.history);
@@ -110,6 +112,25 @@ export default function TableManagementModal({
   const [tableFilter, setTableFilter] = useState('all');
   const [orderPhoneDraft, setOrderPhoneDraft] = useState('');
   const [editingOrderPhone, setEditingOrderPhone] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsPanel, setSettingsPanel] = useState(null);
+  const [hintVisible, setHintVisible] = useState(false);
+  const [scrollAreaHeight, setScrollAreaHeight] = useState(0);
+  const fallbackScrollHeight = useMemo(() => {
+    const windowHeight = Dimensions.get('window').height;
+    return Math.max(
+      280,
+      Math.round(windowHeight - topInset - bottomInset - 140)
+    );
+  }, [topInset, bottomInset, visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      setScrollAreaHeight(0);
+      setMenuOpen(false);
+      setHintVisible(false);
+    }
+  }, [visible]);
 
   const filteredTables = useMemo(() => {
     if (tableFilter === 'all') {
@@ -188,8 +209,21 @@ export default function TableManagementModal({
     setEditOrder(null);
     setEditingOrderPhone(false);
     setOrderPhoneDraft('');
+    setMenuOpen(false);
+    setSettingsPanel(null);
+    setHintVisible(false);
 
     onClose?.();
+  };
+
+  const openSettingsPanel = (panel) => {
+    setMenuOpen(false);
+    setHintVisible(false);
+    setSettingsPanel(panel);
+  };
+
+  const closeSettingsPanel = () => {
+    setSettingsPanel(null);
   };
 
   const beginEditTable = (table) => {
@@ -256,14 +290,15 @@ export default function TableManagementModal({
     );
   };
 
-  const handleSaveEditedOrder = (nextItems) => {
+  const handleSaveEditedOrder = (nextItems, nextOrderNote) => {
     if (!editOrder) {
       return;
     }
 
     const result = updateOrderItems(
       editOrder.id,
-      nextItems
+      nextItems,
+      { orderNote: nextOrderNote }
     );
 
     if (!result?.success) {
@@ -342,6 +377,8 @@ export default function TableManagementModal({
         setNewCapacity('10');
       }
     }
+
+    closeSettingsPanel();
 
     showAlert(
       t('saved'),
@@ -629,15 +666,20 @@ export default function TableManagementModal({
   return (
     <Modal
       visible={visible}
-      transparent
       animationType="slide"
+      presentationStyle="fullScreen"
       onRequestClose={handleClose}
     >
       <KeyboardAvoidingView
         style={[
-          styles.overlay,
+          styles.page,
           {
-            backgroundColor: ui.overlay,
+            backgroundColor: ui.bg,
+            paddingTop: topInset,
+            paddingBottom: Math.max(
+              bottomInset,
+              16
+            ),
           },
         ]}
         behavior={
@@ -645,19 +687,9 @@ export default function TableManagementModal({
             ? 'padding'
             : undefined
         }
+        enabled={Platform.OS === 'ios'}
       >
-        <View
-          style={[
-            styles.sheet,
-            {
-              paddingBottom: Math.max(
-                bottomInset,
-                16
-              ),
-              backgroundColor: ui.bg,
-            },
-          ]}
-        >
+        <View style={styles.body}>
           {/* Header */}
           <View
             style={[
@@ -667,7 +699,7 @@ export default function TableManagementModal({
               },
             ]}
           >
-            <View style={{ flex: 1 }}>
+            <View style={styles.headerTitleRow}>
               <Text
                 style={[
                   styles.title,
@@ -679,82 +711,181 @@ export default function TableManagementModal({
                 {t('tableManagement')}
               </Text>
 
-              <Text
+              <Pressable
                 style={[
-                  styles.subtitle,
+                  styles.infoCircle,
                   {
-                    color: ui.textSecondary,
+                    borderColor: ui.border,
+                    backgroundColor: ui.surfaceMuted,
                   },
                 ]}
+                onHoverIn={() => setHintVisible(true)}
+                onHoverOut={() => setHintVisible(false)}
+                onPress={() => setHintVisible((open) => !open)}
+                accessibilityRole="button"
+                accessibilityLabel={t('tableManagementHint')}
+                hitSlop={8}
               >
-                {t('tableManagementHint')}
-              </Text>
+                <Text
+                  style={[
+                    styles.infoCircleText,
+                    { color: ui.textSecondary },
+                  ]}
+                >
+                  i
+                </Text>
+              </Pressable>
+
+              {hintVisible ? (
+                <View
+                  style={[
+                    styles.hintTooltip,
+                    {
+                      backgroundColor: ui.surface,
+                      borderColor: ui.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.hintTooltipText,
+                      { color: ui.textSecondary },
+                    ]}
+                  >
+                    {t('tableManagementHint')}
+                  </Text>
+                </View>
+              ) : null}
             </View>
 
-            <TouchableOpacity
-              onPress={handleClose}
-              hitSlop={10}
-            >
-              <Text
-                style={[
-                  styles.closeText,
-                  {
-                    color: ui.info,
-                  },
-                ]}
+            <View style={styles.headerActions}>
+              <View style={styles.menuWrap}>
+                <TouchableOpacity
+                  style={[
+                    styles.menuBtn,
+                    {
+                      borderColor: ui.border,
+                      backgroundColor: ui.surfaceMuted,
+                    },
+                  ]}
+                  onPress={() => {
+                    setHintVisible(false);
+                    setMenuOpen((open) => !open);
+                  }}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('tableSettingsMenu')}
+                >
+                  <Ionicons
+                    name="menu"
+                    size={20}
+                    color={ui.textPrimary}
+                  />
+                </TouchableOpacity>
+
+                {menuOpen ? (
+                  <View
+                    style={[
+                      styles.menuDropdown,
+                      {
+                        backgroundColor: ui.surface,
+                        borderColor: ui.border,
+                      },
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={styles.menuItem}
+                      onPress={() => openSettingsPanel('add')}
+                    >
+                      <Text
+                        style={[
+                          styles.menuItemText,
+                          { color: ui.textPrimary },
+                        ]}
+                      >
+                        {t('addTable')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <View
+                      style={[
+                        styles.menuDivider,
+                        { backgroundColor: ui.borderLight },
+                      ]}
+                    />
+
+                    <TouchableOpacity
+                      style={styles.menuItem}
+                      onPress={() => openSettingsPanel('colors')}
+                    >
+                      <Text
+                        style={[
+                          styles.menuItemText,
+                          { color: ui.textPrimary },
+                        ]}
+                      >
+                        {t('colorLegendTitle')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </View>
+
+              <TouchableOpacity
+                onPress={handleClose}
+                hitSlop={10}
               >
-                {t('close')}
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.closeText,
+                    {
+                      color: ui.info,
+                    },
+                  ]}
+                >
+                  {t('close')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
+          {menuOpen ? (
+            <Pressable
+              style={styles.menuDismiss}
+              onPress={() => setMenuOpen(false)}
+            />
+          ) : null}
+
           {/* Main Content */}
+          <View
+            style={styles.scrollArea}
+            onLayout={(event) => {
+              const next = Math.round(
+                event.nativeEvent.layout.height
+              );
+              if (next > 0 && next !== scrollAreaHeight) {
+                setScrollAreaHeight(next);
+              }
+            }}
+          >
           <ScrollView
-            style={styles.scroll}
+            style={[
+              styles.scroll,
+              {
+                height:
+                  scrollAreaHeight > 0
+                    ? scrollAreaHeight
+                    : fallbackScrollHeight,
+              },
+            ]}
             contentContainerStyle={
               styles.scrollContent
             }
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator
+            nestedScrollEnabled
+            bounces
           >
-            {/* Legend */}
-            <View style={styles.legendCard}>
-              <Text style={styles.sectionTitle}>
-                {t('colorLegendTitle')}
-              </Text>
-
-              <Text style={styles.legendHint}>
-                {t('colorLegendHint')}
-              </Text>
-
-              {COLOR_LEGEND_KEYS.map((key) => {
-                const color = TABLE_COLORS[key];
-
-                return (
-                  <View
-                    key={key}
-                    style={styles.legendRow}
-                  >
-                    <View
-                      style={[
-                        styles.legendSwatch,
-                        {
-                          backgroundColor:
-                            color.swatch,
-                        },
-                      ]}
-                    />
-
-                    <Text
-                      style={styles.legendLabel}
-                    >
-                      {t(color.labelKey)}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-
             {/* Filters */}
             <View style={styles.filterRow}>
               {TABLE_FILTERS.map((filter) => {
@@ -788,127 +919,6 @@ export default function TableManagementModal({
                   </TouchableOpacity>
                 );
               })}
-            </View>
-
-            {/* Add Table */}
-            <View style={styles.addCard}>
-              <Text style={styles.sectionTitle}>
-                {t('addTable')}
-              </Text>
-
-              <Text style={styles.addHint}>
-                {t('addTableHint')}
-              </Text>
-
-              <TextInput
-                style={styles.input}
-                value={newNumber}
-                onChangeText={setNewNumber}
-                placeholder={t(
-                  'tableNumberPlaceholder'
-                )}
-                placeholderTextColor={
-                  ui.textMuted
-                }
-                autoCapitalize="characters"
-                maxLength={12}
-              />
-
-              <Text style={styles.fieldLabel}>
-                {t('tableSeatType')}
-              </Text>
-
-              <View style={styles.seatChips}>
-                {TABLE_SEAT_TYPES.map((type) => {
-                  const active =
-                    newSeatsType === type.id;
-
-                  return (
-                    <TouchableOpacity
-                      key={type.id}
-                      style={[
-                        styles.seatChip,
-                        active &&
-                          styles.seatChipActive,
-                      ]}
-                      onPress={() =>
-                        selectSeatType(type.id)
-                      }
-                    >
-                      <Text
-                        style={[
-                          styles.seatChipText,
-                          active &&
-                            styles.seatChipTextActive,
-                        ]}
-                      >
-                        {t(type.labelKey)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {newSeatsType === 'customer' ? (
-                <View
-                  style={styles.capacityWrap}
-                >
-                  <Text
-                    style={styles.fieldLabel}
-                  >
-                    {t('tableSeatingCapacity')}
-                  </Text>
-
-                  <TextInput
-                    style={styles.input}
-                    value={newCapacity}
-                    onChangeText={(value) =>
-                      setNewCapacity(
-                        value
-                          .replace(/[^\d]/g, '')
-                          .slice(0, 2)
-                      )
-                    }
-                    placeholder={t(
-                      'tableCapacityPlaceholder'
-                    )}
-                    placeholderTextColor={
-                      ui.textMuted
-                    }
-                    keyboardType="number-pad"
-                    maxLength={2}
-                  />
-
-                  <Text
-                    style={styles.capacityHint}
-                  >
-                    {t('tableCapacityHint')}
-                  </Text>
-                </View>
-              ) : (
-                <Text
-                  style={styles.fixedCapacityNote}
-                >
-                  {t(
-                    'tableFixedCapacityNote',
-                    {
-                      count:
-                        resolveTableCapacity(
-                          newSeatsType
-                        ),
-                    }
-                  )}
-                </Text>
-              )}
-
-              <TouchableOpacity
-                style={styles.addBtn}
-                onPress={() => handleAddTable()}
-              >
-                <Text style={styles.addBtnText}>
-                  {t('addTable')}
-                </Text>
-              </TouchableOpacity>
             </View>
 
             {/* Groups */}
@@ -1379,6 +1389,7 @@ export default function TableManagementModal({
               {t('tableLongPressRemove')}
             </Text>
           </ScrollView>
+          </View>
 
           {/* Selected Table Detail */}
           {selectedTable ? (
@@ -1391,6 +1402,15 @@ export default function TableManagementModal({
               />
 
               <View style={styles.detailSheet}>
+                <ScrollView
+                  style={styles.detailScroll}
+                  contentContainerStyle={
+                    styles.detailScrollContent
+                  }
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                >
                 <Text
                   style={styles.detailTitle}
                 >
@@ -1436,6 +1456,13 @@ export default function TableManagementModal({
                       )}
                     </Text>
 
+                    {selectedOrder.orderNote ? (
+                      <Text style={styles.detailEmpty}>
+                        {t('orderNote')}:{' '}
+                        {selectedOrder.orderNote}
+                      </Text>
+                    ) : null}
+
                     <Text
                       style={
                         styles.detailItems
@@ -1443,10 +1470,14 @@ export default function TableManagementModal({
                     >
                       {(selectedOrder.items || [])
                         .slice(0, 4)
-                        .map(
-                          (line) =>
-                            `· ${line.name}`
-                        )
+                        .map((line) => {
+                          const note = String(
+                            line.note || ''
+                          ).trim();
+                          return note
+                            ? `· ${line.name} — ${note}`
+                            : `· ${line.name}`;
+                        })
                         .join('\n')}
 
                       {(selectedOrder.items || [])
@@ -1604,6 +1635,10 @@ export default function TableManagementModal({
                       }
                       isPaid={
                         selectedOrder.isPaid
+                      }
+                      orderNote={
+                        selectedOrder.orderNote ||
+                        ''
                       }
                       compact
                     />
@@ -1919,6 +1954,183 @@ export default function TableManagementModal({
                     {t('close')}
                   </Text>
                 </TouchableOpacity>
+                </ScrollView>
+              </View>
+            </View>
+          ) : null}
+
+          {/* Add table / Color definitions panels */}
+          {settingsPanel ? (
+            <View style={styles.settingsOverlay}>
+              <Pressable
+                style={styles.detailBackdrop}
+                onPress={closeSettingsPanel}
+              />
+
+              <View style={styles.detailSheet}>
+                <ScrollView
+                  style={styles.detailScroll}
+                  contentContainerStyle={
+                    styles.detailScrollContent
+                  }
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                >
+                  {settingsPanel === 'add' ? (
+                    <View style={styles.panelCard}>
+                      <Text style={styles.sectionTitle}>
+                        {t('addTable')}
+                      </Text>
+
+                      <Text style={styles.addHint}>
+                        {t('addTableHint')}
+                      </Text>
+
+                      <TextInput
+                        style={styles.input}
+                        value={newNumber}
+                        onChangeText={setNewNumber}
+                        placeholder={t(
+                          'tableNumberPlaceholder'
+                        )}
+                        placeholderTextColor={
+                          ui.textMuted
+                        }
+                        autoCapitalize="characters"
+                        maxLength={12}
+                      />
+
+                      <Text style={styles.fieldLabel}>
+                        {t('tableSeatType')}
+                      </Text>
+
+                      <View style={styles.seatChips}>
+                        {TABLE_SEAT_TYPES.map((type) => {
+                          const active =
+                            newSeatsType === type.id;
+
+                          return (
+                            <TouchableOpacity
+                              key={type.id}
+                              style={[
+                                styles.seatChip,
+                                active &&
+                                  styles.seatChipActive,
+                              ]}
+                              onPress={() =>
+                                selectSeatType(type.id)
+                              }
+                            >
+                              <Text
+                                style={[
+                                  styles.seatChipText,
+                                  active &&
+                                    styles.seatChipTextActive,
+                                ]}
+                              >
+                                {t(type.labelKey)}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+
+                      {newSeatsType === 'customer' ? (
+                        <View style={styles.capacityWrap}>
+                          <Text style={styles.fieldLabel}>
+                            {t('tableSeatingCapacity')}
+                          </Text>
+
+                          <TextInput
+                            style={styles.input}
+                            value={newCapacity}
+                            onChangeText={(value) =>
+                              setNewCapacity(
+                                value
+                                  .replace(/[^\d]/g, '')
+                                  .slice(0, 2)
+                              )
+                            }
+                            placeholder={t(
+                              'tableCapacityPlaceholder'
+                            )}
+                            placeholderTextColor={
+                              ui.textMuted
+                            }
+                            keyboardType="number-pad"
+                            maxLength={2}
+                          />
+
+                          <Text style={styles.capacityHint}>
+                            {t('tableCapacityHint')}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.fixedCapacityNote}>
+                          {t('tableFixedCapacityNote', {
+                            count: resolveTableCapacity(
+                              newSeatsType
+                            ),
+                          })}
+                        </Text>
+                      )}
+
+                      <TouchableOpacity
+                        style={styles.addBtn}
+                        onPress={() => handleAddTable()}
+                      >
+                        <Text style={styles.addBtnText}>
+                          {t('addTable')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.panelCard}>
+                      <Text style={styles.sectionTitle}>
+                        {t('colorLegendTitle')}
+                      </Text>
+
+                      <Text style={styles.legendHint}>
+                        {t('colorLegendHint')}
+                      </Text>
+
+                      {COLOR_LEGEND_KEYS.map((key) => {
+                        const color = TABLE_COLORS[key];
+
+                        return (
+                          <View
+                            key={key}
+                            style={styles.legendRow}
+                          >
+                            <View
+                              style={[
+                                styles.legendSwatch,
+                                {
+                                  backgroundColor:
+                                    color.swatch,
+                                },
+                              ]}
+                            />
+
+                            <Text style={styles.legendLabel}>
+                              {t(color.labelKey)}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.dismissDetail}
+                    onPress={closeSettingsPanel}
+                  >
+                    <Text style={styles.dismissDetailText}>
+                      {t('close')}
+                    </Text>
+                  </TouchableOpacity>
+                </ScrollView>
               </View>
             </View>
           ) : null}
@@ -1938,35 +2150,41 @@ export default function TableManagementModal({
 
 function createStyles(ui) {
   return {
-    overlay: {
+    page: {
       flex: 1,
-      justifyContent: 'flex-end',
-      backgroundColor:
-        'rgba(17, 24, 39, 0.45)',
+      minHeight: 0,
+      ...(Platform.OS === 'web'
+        ? { height: '100%', maxHeight: '100%' }
+        : {}),
     },
 
-    backdrop: {
-      ...StyleSheet.absoluteFillObject,
-    },
-
-    sheet: {
-      maxHeight: '92%',
-      backgroundColor: ui.bg,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingTop: 16,
+    body: {
+      flex: 1,
+      minHeight: 0,
       overflow: 'hidden',
+      backgroundColor: ui.bg,
     },
 
     header: {
       paddingHorizontal: 18,
+      paddingTop: 12,
       paddingBottom: 12,
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       gap: 12,
       borderBottomWidth: 1,
       borderBottomColor: ui.borderLight,
+      zIndex: 40,
+    },
+
+    headerTitleRow: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      position: 'relative',
+      minWidth: 0,
     },
 
     title: {
@@ -1974,24 +2192,122 @@ function createStyles(ui) {
       fontWeight: '800',
       color: ui.textPrimary,
       letterSpacing: -0.3,
+      flexShrink: 1,
     },
 
-    subtitle: {
-      marginTop: 4,
+    infoCircle: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    infoCircleText: {
+      fontSize: 12,
+      fontWeight: '800',
+      lineHeight: 14,
+    },
+
+    hintTooltip: {
+      position: 'absolute',
+      top: 30,
+      left: 0,
+      right: 0,
+      maxWidth: 320,
+      zIndex: 50,
+      borderWidth: 1,
+      borderRadius: ui.radiusMd,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      shadowColor: '#000',
+      shadowOpacity: 0.12,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
+    },
+
+    hintTooltipText: {
       fontSize: 13,
-      color: ui.textSecondary,
-      maxWidth: 280,
+      lineHeight: 18,
+      fontWeight: '500',
+    },
+
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+
+    menuWrap: {
+      position: 'relative',
+      zIndex: 45,
+    },
+
+    menuBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    menuDropdown: {
+      position: 'absolute',
+      top: 42,
+      right: 0,
+      minWidth: 180,
+      borderWidth: 1,
+      borderRadius: ui.radiusMd,
+      paddingVertical: 4,
+      zIndex: 50,
+      shadowColor: '#000',
+      shadowOpacity: 0.14,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 8,
+    },
+
+    menuItem: {
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+
+    menuItemText: {
+      fontSize: 14,
+      fontWeight: '700',
+    },
+
+    menuDivider: {
+      height: StyleSheet.hairlineWidth,
+      marginHorizontal: 10,
+    },
+
+    menuDismiss: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 30,
     },
 
     closeText: {
       fontSize: 14,
       fontWeight: '700',
       color: ui.info,
-      marginTop: 4,
+    },
+
+    scrollArea: {
+      flex: 1,
+      minHeight: 0,
+      overflow: 'hidden',
     },
 
     scroll: {
       flexGrow: 0,
+      flexShrink: 1,
+      ...(Platform.OS === 'web'
+        ? { overflow: 'auto' }
+        : {}),
     },
 
     scrollContent: {
@@ -2000,19 +2316,8 @@ function createStyles(ui) {
       gap: 16,
     },
 
-    legendCard: {
-      backgroundColor: ui.surface,
-      borderRadius: ui.radiusLg,
-      borderWidth: 1,
-      borderColor: ui.borderLight,
-      padding: 14,
-      gap: 8,
-    },
-
-    sectionTitle: {
-      fontSize: 15,
-      fontWeight: '800',
-      color: ui.textPrimary,
+    panelCard: {
+      gap: 10,
     },
 
     legendHint: {
@@ -2038,6 +2343,12 @@ function createStyles(ui) {
       fontSize: 13,
       color: ui.textPrimary,
       fontWeight: '500',
+    },
+
+    sectionTitle: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: ui.textPrimary,
     },
 
     filterRow: {
@@ -2077,15 +2388,6 @@ function createStyles(ui) {
       fontSize: 13,
       fontWeight: '600',
       paddingVertical: 12,
-    },
-
-    addCard: {
-      backgroundColor: ui.surface,
-      borderRadius: ui.radiusLg,
-      borderWidth: 1,
-      borderColor: ui.borderLight,
-      padding: 14,
-      gap: 10,
     },
 
     addHint: {
@@ -2349,7 +2651,7 @@ function createStyles(ui) {
 
     cardAddOrderBtn: {
       marginTop: 8,
-      backgroundColor: '#059669',
+      backgroundColor: ui.success,
       borderRadius: 8,
       paddingVertical: 8,
       paddingHorizontal: 10,
@@ -2494,6 +2796,12 @@ function createStyles(ui) {
       zIndex: 20,
     },
 
+    settingsOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: 'flex-end',
+      zIndex: 35,
+    },
+
     detailBackdrop: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor:
@@ -2504,11 +2812,25 @@ function createStyles(ui) {
       backgroundColor: ui.surface,
       borderTopLeftRadius: 18,
       borderTopRightRadius: 18,
-      padding: 18,
-      gap: 8,
+      paddingTop: 18,
+      paddingHorizontal: 18,
+      paddingBottom: 8,
       borderTopWidth: 1,
       borderColor:
         TABLE_COLORS.occupied.borderColor,
+      maxHeight: '78%',
+    },
+
+    detailScroll: {
+      flexGrow: 0,
+      ...(Platform.OS === 'web'
+        ? { maxHeight: '100%', overflow: 'auto' }
+        : {}),
+    },
+
+    detailScrollContent: {
+      gap: 8,
+      paddingBottom: 18,
     },
 
     detailTitle: {
@@ -2566,7 +2888,7 @@ function createStyles(ui) {
     },
 
     paidBtn: {
-      backgroundColor: '#059669',
+      backgroundColor: ui.success,
       borderRadius: ui.radiusMd,
       paddingVertical: 12,
       alignItems: 'center',

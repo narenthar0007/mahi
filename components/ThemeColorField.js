@@ -11,22 +11,22 @@ import {
   Platform,
 } from 'react-native';
 import { isValidHexColor, normalizeHexColor, useAppTheme } from '../utils/theme';
+import { useThemedStyles } from '../utils/uiTheme';
 
 const COLOR_SWATCHES = [
-  '#000000', '#212529', '#495057', '#868e96', '#adb5bd', '#dee2e6', '#f8f9fa', '#ffffff',
-  '#6a040f', '#9d0208', '#d00000', '#e94560', '#ff6b6b', '#f8ad9d', '#ffc9c9', '#fff0f3',
-  '#370617', '#6a040f', '#e85d04', '#f48c06', '#ffba08', '#ffd60a', '#fff3bf', '#fff9db',
-  '#081c15', '#1b4332', '#2d6a4f', '#40916c', '#52b788', '#95d5b2', '#d8f3dc', '#f1faee',
-  '#03045e', '#023047', '#0077b6', '#0096c7', '#48cae4', '#90e0ef', '#caf0f8', '#e0fbfc',
-  '#10002b', '#240046', '#7b2cbf', '#9d4edd', '#c77dff', '#e0aaff', '#f3d9ff', '#faf5ff',
-  '#0b132b', '#1a1a2e', '#16213e', '#0f3460', '#533483', '#2b2d42', '#14213d', '#283618',
+  '#000000', '#0F172A', '#334155', '#64748B', '#94A3B8', '#CBD5E1', '#E2E8F0', '#ffffff',
+  '#134E4A', '#0F766E', '#0D9488', '#14B8A6', '#5EEAD4', '#99F6E4', '#CCFBF1', '#F0FDFA',
+  '#0C4A6E', '#0369A1', '#0284C7', '#0EA5E9', '#38BDF8', '#7DD3FC', '#BAE6FD', '#E0F2FE',
+  '#365314', '#3F6212', '#4D7C0F', '#65A30D', '#84CC16', '#BEF264', '#D9F99D', '#F7FEE7',
+  '#9A3412', '#C2410C', '#EA580C', '#F97316', '#FB923C', '#FDBA74', '#FED7AA', '#FFF7ED',
+  '#5B21B6', '#6D28D9', '#7C3AED', '#8B5CF6', '#A78BFA', '#C4B5FD', '#DDD6FE', '#F5F3FF',
 ];
 
-function WebColorInput({ value, onChange, onOpenPicker, accentColor }) {
+function WebColorInput({ value, onChange, onOpenPicker, accentColor, styles }) {
   if (Platform.OS !== 'web') return null;
 
   const safeValue = isValidHexColor(value) ? value : '#000000';
-  const accent = accentColor || '#495057';
+  const accent = accentColor || '#0F766E';
 
   return (
     <View style={styles.webPickerWrap}>
@@ -38,8 +38,8 @@ function WebColorInput({ value, onChange, onOpenPicker, accentColor }) {
         style={{
           width: 44,
           height: 36,
-          border: '1px solid #dee2e6',
-          borderRadius: 8,
+          border: '1px solid #E8EAF0',
+          borderRadius: 10,
           padding: 2,
           cursor: 'pointer',
           backgroundColor: '#fff',
@@ -57,8 +57,9 @@ function WebColorInput({ value, onChange, onOpenPicker, accentColor }) {
 
 export default function ThemeColorField({ label, value, onChange }) {
   const theme = useAppTheme();
+  const { ui, styles } = useThemedStyles(createStyles);
   const [pickerVisible, setPickerVisible] = useState(false);
-  const displayColor = isValidHexColor(value) ? value : '#dee2e6';
+  const displayColor = isValidHexColor(value) ? value : ui.border;
 
   const applyColor = (nextColor) => {
     onChange(normalizeHexColor(nextColor, displayColor));
@@ -80,7 +81,7 @@ export default function ThemeColorField({ label, value, onChange }) {
             value={value}
             onChangeText={onChange}
             placeholder="#000000"
-            placeholderTextColor="#adb5bd"
+            placeholderTextColor={ui.textMuted}
             autoCapitalize="none"
             maxLength={7}
           />
@@ -98,6 +99,7 @@ export default function ThemeColorField({ label, value, onChange }) {
           onChange={applyColor}
           onOpenPicker={() => setPickerVisible(true)}
           accentColor={theme.filterSortColor}
+          styles={styles}
         />
       </View>
 
@@ -154,119 +156,121 @@ export default function ThemeColorField({ label, value, onChange }) {
   );
 }
 
-const styles = StyleSheet.create({
-  colorRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  colorPreview: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#dee2e6',
-    marginTop: 18,
-  },
-  colorField: {
-    flex: 1,
-  },
-  colorLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#868e96',
-    marginBottom: 4,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  colorInput: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#e9ecef',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
-    color: '#1a1a2e',
-  },
-  pickBtn: {
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  pickBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  webPickerWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  pickerOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  pickerBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  pickerSheet: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    maxHeight: '80%',
-    height: '80%',
-    flexDirection: 'column',
-    zIndex: 1,
-    elevation: 8,
-  },
-  pickerScroll: {
-    flex: 1,
-    minHeight: 0,
-  },
-  swatchGridWrap: {
-    paddingBottom: 8,
-  },
-  pickerTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#1a1a2e',
-    marginBottom: 4,
-  },
-  pickerHint: {
-    fontSize: 12,
-    color: '#868e96',
-    marginBottom: 12,
-  },
-  swatchGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingBottom: 8,
-  },
-  swatch: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-  },
-  pickerCloseBtn: {
-    marginTop: 8,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  pickerCloseText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#fff',
-  },
-});
+function createStyles(ui) {
+  return {
+    colorRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+    },
+    colorPreview: {
+      width: 36,
+      height: 36,
+      borderRadius: ui.radiusSm,
+      borderWidth: 1,
+      borderColor: ui.border,
+      marginTop: 18,
+    },
+    colorField: {
+      flex: 1,
+    },
+    colorLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: ui.textMuted,
+      marginBottom: 4,
+    },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    colorInput: {
+      flex: 1,
+      backgroundColor: ui.surfaceMuted,
+      borderWidth: 1,
+      borderColor: ui.border,
+      borderRadius: ui.radiusSm,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      fontSize: 14,
+      color: ui.textPrimary,
+      minHeight: 44,
+    },
+    pickBtn: {
+      borderRadius: ui.radiusSm,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+      minHeight: 44,
+      justifyContent: 'center',
+    },
+    pickBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    webPickerWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 8,
+    },
+    pickerOverlay: {
+      flex: 1,
+      justifyContent: 'center',
+      padding: 20,
+    },
+    pickerBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: ui.overlay,
+    },
+    pickerSheet: {
+      backgroundColor: ui.surface,
+      borderRadius: ui.radiusLg,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: ui.border,
+      maxHeight: '80%',
+    },
+    pickerTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: ui.textPrimary,
+      marginBottom: 4,
+    },
+    pickerHint: {
+      fontSize: 12,
+      color: ui.textMuted,
+      marginBottom: 12,
+    },
+    pickerScroll: {
+      maxHeight: 280,
+    },
+    swatchGridWrap: {
+      paddingBottom: 8,
+    },
+    swatchGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    swatch: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: ui.border,
+    },
+    pickerCloseBtn: {
+      marginTop: 12,
+      borderRadius: ui.radiusMd,
+      paddingVertical: 14,
+      alignItems: 'center',
+      minHeight: 48,
+    },
+    pickerCloseText: {
+      color: '#fff',
+      fontWeight: '700',
+      fontSize: 15,
+    },
+  };
+}
